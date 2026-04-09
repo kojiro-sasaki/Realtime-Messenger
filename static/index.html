@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <body>
+    <input id="msg" placeholder="write message" />
+    <button onclick="send()">Send</button>
+
+    <pre id="log"></pre>
+
+    <script>
+      let log = document.getElementById("log");
+
+      let ws = new WebSocket("ws://localhost:8080/ws");
+
+      ws.onmessage = (e) => {
+        log.textContent += "IN: " + e.data + "\n";
+      };
+
+      function send() {
+        let value = document.getElementById("msg").value;
+        log.textContent += "OUT: " + value + "\n";
+        ws.send(value);
+      }
+    </script>
+  </body>
+</html>
