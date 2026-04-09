@@ -17,6 +17,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Upgrager error")
 		return
 	}
+
 	defer conn.Close()
 	for {
 		_, msg, err := conn.ReadMessage()
@@ -32,6 +33,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	http.HandleFunc("/ws", wsHandler)
+	http.Handle("/", http.FileServer(http.Dir("./static")))
 	fmt.Println("server started")
 
 	err := http.ListenAndServe(":8080", nil)
