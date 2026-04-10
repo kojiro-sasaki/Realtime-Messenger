@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/websocket"
 )
@@ -23,9 +24,16 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 		return
 	}
+
+	nameStr := strings.TrimSpace(string(name))
+	if nameStr == "" {
+		conn.Close()
+		return
+	}
+
 	mu.Lock()
 	for c := range clients {
-		if c.name == string(name) {
+		if c.name == nameStr {
 			mu.Unlock()
 			conn.WriteMessage(websocket.TextMessage, []byte("that name is taken"))
 			conn.Close()
@@ -33,9 +41,10 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	mu.Unlock()
+
 	client := &Client{
 		conn: conn,
-		name: string(name),
+		name: nameStr,
 	}
 
 	mu.Lock()
@@ -59,11 +68,13 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		leaveMsg := []byte(client.name + " left the chat")
 		mu.Lock()
 		delete(clients, client)
+
 		var conns []*Client
 		for c := range clients {
 			conns = append(conns, c)
 		}
 		mu.Unlock()
+
 		for _, c := range conns {
 			c.conn.WriteMessage(websocket.TextMessage, leaveMsg)
 		}
@@ -76,14 +87,18 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		fullMsg := []byte(client.name + ": " + string(msg))
+		text := strings.TrimSpace(string(msg))
+		if text == "" {
+			continue
+		}
+
+		fullMsg := []byte(client.name + ": " + text)
 
 		mu.Lock()
 		var conns []*Client
 		for c := range clients {
 			conns = append(conns, c)
 		}
-
 		mu.Unlock()
 
 		for _, c := range conns {
