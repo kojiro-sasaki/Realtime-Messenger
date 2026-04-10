@@ -35,7 +35,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	for c := range clients {
 		if c.name == nameStr {
 			mu.Unlock()
-			conn.WriteMessage(websocket.TextMessage, []byte("that name is taken"))
+			conn.WriteMessage(websocket.TextMessage, []byte("[SYSTEM] Name already taken"))
 			conn.Close()
 			return
 		}
@@ -49,35 +49,16 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	mu.Lock()
 	clients[client] = true
-	joinMsg := []byte("[SYSTEM] " + client.name + " joined the chat")
-
-	var conns []*Client
-	for c := range clients {
-		conns = append(conns, c)
-	}
 	mu.Unlock()
 
-	for _, c := range conns {
-		if c == client {
-			continue
-		}
-		c.conn.WriteMessage(websocket.TextMessage, joinMsg)
-	}
+	broadcast([]byte("[SYSTEM] " + client.name + " joined the chat"))
 
 	defer func() {
-		leaveMsg := []byte("[SYSTEM] " + client.name + " left the chat")
 		mu.Lock()
 		delete(clients, client)
-
-		var conns []*Client
-		for c := range clients {
-			conns = append(conns, c)
-		}
 		mu.Unlock()
 
-		for _, c := range conns {
-			c.conn.WriteMessage(websocket.TextMessage, leaveMsg)
-		}
+		broadcast([]byte("[SYSTEM] " + client.name + " left the chat"))
 		conn.Close()
 	}()
 
@@ -91,18 +72,6 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		if text == "" {
 			continue
 		}
-		if len(text) > 500 {
-			conn.WriteMessage(websocket.TextMessage, []byte("[SYSTEM] Message too long"))
-			continue
-		}
-		fullMsg := []byte(client.name + ": " + text)
-
-		mu.Lock()
-		var conns []*Client
-		for c := range clients {
-			conns = append(conns, c)
-		}
-		mu.Unlock()
 
 		if text == "/users" {
 			mu.Lock()
@@ -112,19 +81,22 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			mu.Unlock()
 
-			response := "[SYSTEM] Users: " + strings.Join(names, ", ")
-			conn.WriteMessage(websocket.TextMessage, []byte(response))
+			client.mu.Lock()
+			conn.WriteMessage(
+				websocket.TextMessage,
+				[]byte("[SYSTEM] Users: "+strings.Join(names, ", ")),
+			)
+			client.mu.Unlock()
 			continue
 		}
 
-		for _, c := range conns {
-			err := c.conn.WriteMessage(websocket.TextMessage, fullMsg)
-			if err != nil {
-				mu.Lock()
-				delete(clients, c)
-				mu.Unlock()
-				c.conn.Close()
-			}
+		if len(text) > 500 {
+			client.mu.Lock()
+			conn.WriteMessage(websocket.TextMessage, []byte("[SYSTEM] Message too long"))
+			client.mu.Unlock()
+			continue
 		}
+
+		broadcast([]byte(client.name + ": " + text))
 	}
 }
