@@ -34,9 +34,17 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	mu.Unlock()
 
 	defer func() {
+		leaveMsg := []byte(client.name + " left the chat")
 		mu.Lock()
 		delete(clients, client)
+		var conns []*Client
+		for c := range clients {
+			conns = append(conns, c)
+		}
 		mu.Unlock()
+		for _, c := range conns {
+			c.conn.WriteMessage(websocket.TextMessage, leaveMsg)
+		}
 		conn.Close()
 	}()
 
@@ -47,6 +55,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		fullMsg := []byte(client.name + ": " + string(msg))
+		joinMsg := []byte(client.name + " joined the chat")
 
 		mu.Lock()
 		var conns []*Client
@@ -59,7 +68,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			if c == client {
 				continue
 			}
-
+			c.conn.WriteMessage(websocket.TextMessage, joinMsg)
 			err := c.conn.WriteMessage(websocket.TextMessage, fullMsg)
 			if err != nil {
 				mu.Lock()
