@@ -49,7 +49,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	mu.Lock()
 	clients[client] = true
-	joinMsg := []byte(client.name + " joined the chat")
+	joinMsg := []byte("[SYSTEM] " + client.name + " joined the chat")
 
 	var conns []*Client
 	for c := range clients {
@@ -65,7 +65,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defer func() {
-		leaveMsg := []byte(client.name + " left the chat")
+		leaveMsg := []byte("[SYSTEM] " + client.name + " left the chat")
 		mu.Lock()
 		delete(clients, client)
 
@@ -91,7 +91,10 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		if text == "" {
 			continue
 		}
-
+		if len(text) > 500 {
+			conn.WriteMessage(websocket.TextMessage, []byte("[SYSTEM] Message too long"))
+			continue
+		}
 		fullMsg := []byte(client.name + ": " + text)
 
 		mu.Lock()
@@ -101,10 +104,20 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		mu.Unlock()
 
-		for _, c := range conns {
-			if c == client {
-				continue
+		if text == "/users" {
+			mu.Lock()
+			var names []string
+			for c := range clients {
+				names = append(names, c.name)
 			}
+			mu.Unlock()
+
+			response := "[SYSTEM] Users: " + strings.Join(names, ", ")
+			conn.WriteMessage(websocket.TextMessage, []byte(response))
+			continue
+		}
+
+		for _, c := range conns {
 			err := c.conn.WriteMessage(websocket.TextMessage, fullMsg)
 			if err != nil {
 				mu.Lock()
