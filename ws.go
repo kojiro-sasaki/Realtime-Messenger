@@ -23,7 +23,16 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 		return
 	}
-
+	mu.Lock()
+	for c := range clients {
+		if c.name == string(name) {
+			mu.Unlock()
+			conn.WriteMessage(websocket.TextMessage, []byte("that name is taken"))
+			conn.Close()
+			return
+		}
+	}
+	mu.Unlock()
 	client := &Client{
 		conn: conn,
 		name: string(name),
@@ -31,7 +40,20 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	mu.Lock()
 	clients[client] = true
+	joinMsg := []byte(client.name + " joined the chat")
+
+	var conns []*Client
+	for c := range clients {
+		conns = append(conns, c)
+	}
 	mu.Unlock()
+
+	for _, c := range conns {
+		if c == client {
+			continue
+		}
+		c.conn.WriteMessage(websocket.TextMessage, joinMsg)
+	}
 
 	defer func() {
 		leaveMsg := []byte(client.name + " left the chat")
@@ -55,20 +77,19 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		fullMsg := []byte(client.name + ": " + string(msg))
-		joinMsg := []byte(client.name + " joined the chat")
 
 		mu.Lock()
 		var conns []*Client
 		for c := range clients {
 			conns = append(conns, c)
 		}
+
 		mu.Unlock()
 
 		for _, c := range conns {
 			if c == client {
 				continue
 			}
-			c.conn.WriteMessage(websocket.TextMessage, joinMsg)
 			err := c.conn.WriteMessage(websocket.TextMessage, fullMsg)
 			if err != nil {
 				mu.Lock()
