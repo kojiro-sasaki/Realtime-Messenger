@@ -59,3 +59,21 @@ func removeClient(c *Client) {
 	mu.Unlock()
 	c.conn.Close()
 }
+
+func sendPrivateMessage(sender *Client, recipientName string, msg string) {
+	var target *Client
+	mu.Lock()
+	for c := range clients {
+		if c.name == recipientName {
+			target = c
+			break
+		}
+	}
+	mu.Unlock()
+	if target == nil {
+		sendToClient(sender, []byte("[SYSTEM] User not found"))
+		return
+	}
+	sendToClient(target, []byte("[DM] "+sender.name+":"+msg))
+	sendToClient(sender, []byte("[DM to "+target.name+"] "+msg))
+}
