@@ -31,16 +31,11 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.Lock()
-	for c := range clients {
-		if c.name == nameStr {
-			mu.Unlock()
-			conn.WriteMessage(websocket.TextMessage, []byte("[SYSTEM] Name already taken"))
-			conn.Close()
-			return
-		}
+	if isNameTaken(nameStr) {
+		conn.WriteMessage(websocket.TextMessage, []byte("[SYSTEM] Name already taken"))
+		conn.Close()
+		return
 	}
-	mu.Unlock()
 
 	client := &Client{
 		conn: conn,
@@ -72,29 +67,15 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		if text == "" {
 			continue
 		}
-
 		if text == "/users" {
-			mu.Lock()
-			var names []string
-			for c := range clients {
-				names = append(names, c.name)
-			}
-			mu.Unlock()
-
-			client.mu.Lock()
-			conn.WriteMessage(
-				websocket.TextMessage,
-				[]byte("[SYSTEM] Users: "+strings.Join(names, ", ")),
-			)
-			client.mu.Unlock()
+			names := getUsernames()
+			sendToClient(client, []byte("[SYSTEM] Users: "+strings.Join(names, ", ")))
 			continue
 		}
-
 		if len(text) > 500 {
 			sendToClient(client, []byte("[SYSTEM] Message too long"))
 			continue
 		}
-
 		broadcast([]byte(client.name + ": " + text))
 	}
 }

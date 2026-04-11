@@ -34,3 +34,24 @@ func sendToClient(c *Client, msg []byte) {
 	defer c.mu.Unlock()
 	c.conn.WriteMessage(websocket.TextMessage, msg)
 }
+
+func getUsernames() []string {
+	mu.Lock()
+	defer mu.Unlock()
+	var names []string
+	for c := range clients {
+		names = append(names, c.name)
+	}
+	return names
+}
+
+func isNameTaken(name string) bool {
+	mu.Lock()
+	defer mu.Unlock()
+	for c := range clients {
+		if c.name == name {
+			return true
+		}
+	}
+	return false
+}
