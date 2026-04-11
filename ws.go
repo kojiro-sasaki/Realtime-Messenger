@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -14,12 +15,16 @@ var upgrader = websocket.Upgrader{
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
-	conn.SetReadLimit(1024)
 	if err != nil {
 		fmt.Println("Upgrader error", err)
 		return
 	}
-
+	conn.SetReadDeadline(time.Now().Add(120 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(120 * time.Second))
+		return nil
+	})
+	conn.SetReadLimit(1024)
 	_, name, err := conn.ReadMessage()
 	if err != nil {
 		conn.Close()
@@ -42,7 +47,22 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		conn: conn,
 		name: nameStr,
 	}
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
 
+		for {
+			<-ticker.C
+
+			client.mu.Lock()
+			err := conn.WriteMessage(websocket.PingMessage, nil)
+			client.mu.Unlock()
+
+			if err != nil {
+				return
+			}
+		}
+	}()
 	mu.Lock()
 	clients[client] = true
 	mu.Unlock()
@@ -64,6 +84,16 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 		text := strings.TrimSpace(string(msg))
 		if text == "" {
+			continue
+		}
+		if strings.HasPrefix(text, "/msg ") {
+			parts := strings.SplitN(text, " ", 3)
+			if len(parts) < 3 {
+				sendToClient(client, []byte("[SYSTEM] Usage : /msg <user> <message>"))
+			}
+			reciever := parts[1]
+			message := parts[2]
+			sendPrivateMessage(client, reciever, message)
 			continue
 		}
 		if text == "/users" {
