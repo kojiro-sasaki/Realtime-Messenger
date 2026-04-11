@@ -22,17 +22,14 @@ func broadcast(msg []byte) {
 		err := c.conn.WriteMessage(websocket.TextMessage, msg)
 		c.mu.Unlock()
 		if err != nil {
-			mu.Lock()
-			delete(clients, c)
-			mu.Unlock()
-			c.conn.Close()
+			removeClient(c)
 		}
 	}
 }
-func sendToClient(c *Client, msg []byte) {
+func sendToClient(c *Client, msg []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.conn.WriteMessage(websocket.TextMessage, msg)
+	return c.conn.WriteMessage(websocket.TextMessage, msg)
 }
 
 func getUsernames() []string {
@@ -54,4 +51,11 @@ func isNameTaken(name string) bool {
 		}
 	}
 	return false
+}
+
+func removeClient(c *Client) {
+	mu.Lock()
+	delete(clients, c)
+	mu.Unlock()
+	c.conn.Close()
 }

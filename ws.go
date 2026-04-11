@@ -14,6 +14,7 @@ var upgrader = websocket.Upgrader{
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
+	conn.SetReadLimit(1024)
 	if err != nil {
 		fmt.Println("Upgrader error", err)
 		return
@@ -45,21 +46,19 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	clients[client] = true
 	mu.Unlock()
-
+	fmt.Println("client connected:", client.name)
 	broadcast([]byte("[SYSTEM] " + client.name + " joined the chat"))
 
 	defer func() {
-		mu.Lock()
-		delete(clients, client)
-		mu.Unlock()
-
+		fmt.Println("client disconnected:", client.name)
+		removeClient(client)
 		broadcast([]byte("[SYSTEM] " + client.name + " left the chat"))
-		conn.Close()
 	}()
 
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
+			fmt.Println("read error:", err)
 			break
 		}
 
@@ -69,11 +68,15 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if text == "/users" {
 			names := getUsernames()
-			sendToClient(client, []byte("[SYSTEM] Users: "+strings.Join(names, ", ")))
+			if err := sendToClient(client, []byte("[SYSTEM] Users: "+strings.Join(names, ", "))); err != nil {
+				return
+			}
 			continue
 		}
 		if len(text) > 500 {
-			sendToClient(client, []byte("[SYSTEM] Message too long"))
+			if err := sendToClient(client, []byte("[SYSTEM] Message too long")); err != nil {
+				return
+			}
 			continue
 		}
 		broadcast([]byte(client.name + ": " + text))
