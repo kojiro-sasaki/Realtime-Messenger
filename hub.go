@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -76,4 +77,26 @@ func sendPrivateMessage(sender *Client, recipientName string, msg string) {
 	}
 	sendToClient(target, []byte("[DM] "+sender.name+":"+msg))
 	sendToClient(sender, []byte("[DM to "+target.name+"] "+msg))
+}
+
+func handleCommand(c *Client, command string) bool {
+	if command == "/users" {
+		names := getUsernames()
+		sendToClient(c, []byte("[SYSTEM] Users: "+strings.Join(names, ", ")))
+		return true
+	}
+
+	if strings.HasPrefix(command, "/msg ") {
+		parts := strings.SplitN(command, " ", 3)
+
+		if len(parts) < 3 {
+			sendToClient(c, []byte("[SYSTEM] Usage: /msg <user> <message>"))
+			return true
+		}
+
+		sendPrivateMessage(c, parts[1], parts[2])
+		return true
+	}
+
+	return false
 }
