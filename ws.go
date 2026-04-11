@@ -86,21 +86,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		if text == "" {
 			continue
 		}
-		if strings.HasPrefix(text, "/msg ") {
-			parts := strings.SplitN(text, " ", 3)
-			if len(parts) < 3 {
-				sendToClient(client, []byte("[SYSTEM] Usage : /msg <user> <message>"))
-			}
-			reciever := parts[1]
-			message := parts[2]
-			sendPrivateMessage(client, reciever, message)
-			continue
-		}
-		if text == "/users" {
-			names := getUsernames()
-			if err := sendToClient(client, []byte("[SYSTEM] Users: "+strings.Join(names, ", "))); err != nil {
-				return
-			}
+		if handleCommand(client, text) {
 			continue
 		}
 		if len(text) > 500 {
