@@ -91,9 +91,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if len(text) > 500 {
-			client.mu.Lock()
-			conn.WriteMessage(websocket.TextMessage, []byte("[SYSTEM] Message too long"))
-			client.mu.Unlock()
+			sendToClient(client, []byte("[SYSTEM] Message too long"))
 			continue
 		}
 

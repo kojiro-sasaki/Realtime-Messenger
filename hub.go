@@ -29,3 +29,8 @@ func broadcast(msg []byte) {
 		}
 	}
 }
+func sendToClient(c *Client, msg []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.conn.WriteMessage(websocket.TextMessage, msg)
+}
