@@ -122,5 +122,14 @@ func handleCommand(c *Client, command string) bool {
 		broadcast([]byte("[SYSTEM]" + oldname + " changed to: " + newname))
 		return true
 	}
+	if command == "/help" {
+		sendToClient(c, []byte("[SYSTEM] Commands:\n"+
+			"/users - list of active users\n"+
+			"/msg <user> <msg> - private message\n"+
+			"/name <newname> - change name\n"+
+			"/help - show commands\n"))
+		return true
+	}
+
 	return false
 }
