@@ -98,5 +98,29 @@ func handleCommand(c *Client, command string) bool {
 		return true
 	}
 
+	if strings.HasPrefix(command, "/name ") {
+		parts := strings.SplitN(command, " ", 2)
+		if len(parts) < 2 {
+			sendToClient(c, []byte("[SYSTEM] Usage: /name <newname>"))
+			return true
+
+		}
+		newname := strings.TrimSpace(parts[1])
+		if newname == "" {
+			sendToClient(c, []byte("[SYSTEM] Invalid name"))
+			return true
+
+		}
+		if isNameTaken(newname) {
+			sendToClient(c, []byte("[SYSTEM]Name is already taken"))
+			return true
+
+		}
+		oldname := c.name
+		c.name = newname
+		sendToClient(c, []byte("[SYSTEM] You change name to: "+newname))
+		broadcast([]byte("[SYSTEM]" + oldname + " changed to: " + newname))
+		return true
+	}
 	return false
 }
