@@ -39,7 +39,15 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 		return
 	}
-
+	if len(nameStr) > 20 {
+		data, _ := json.Marshal(Message{
+			Type:    "system",
+			Message: "Name too long",
+		})
+		conn.WriteMessage(websocket.TextMessage, data)
+		conn.Close()
+		return
+	}
 	if isNameTaken(nameStr) {
 		data, _ := json.Marshal(Message{
 			Type:    "system",

@@ -164,9 +164,10 @@ func handleCommand(c *Client, text string) bool {
 			})
 			return true
 		}
-
+		c.mu.Lock()
 		old := c.name
 		c.name = newname
+		c.mu.Unlock()
 
 		sendJSON(c, Message{
 			Type:    "system",
