@@ -34,11 +34,6 @@ func broadcast(msg []byte) {
 		}
 	}
 }
-func sendToClient(c *Client, msg []byte) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.conn.WriteMessage(websocket.TextMessage, msg)
-}
 
 func getUsernames() []string {
 	mu.Lock()

@@ -34,7 +34,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nameStr := strings.TrimSpace(string(name))
+	nameStr := strings.ToLower(strings.TrimSpace(string(name)))
 	if nameStr == "" {
 		conn.Close()
 		return
@@ -105,12 +105,18 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		text := strings.TrimSpace(string(msg))
+		fmt.Println("message:", client.name, text)
+
 		if text == "" {
 			continue
 		}
 
-		if handleCommand(client, text) {
-			continue
+		if strings.HasPrefix(text, "/") {
+			fmt.Println("command:", text)
+
+			if handleCommand(client, text) {
+				continue
+			}
 		}
 
 		if len(text) > 500 {
