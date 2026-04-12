@@ -39,6 +39,15 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 		return
 	}
+	if strings.Contains(nameStr, " ") {
+		data, _ := json.Marshal(Message{
+			Type:    "system",
+			Message: "Name cannot contain spaces",
+		})
+		conn.WriteMessage(websocket.TextMessage, data)
+		conn.Close()
+		return
+	}
 	if len(nameStr) > 20 {
 		data, _ := json.Marshal(Message{
 			Type:    "system",
@@ -101,6 +110,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
+			fmt.Println("read error:", err)
 			break
 		}
 
@@ -110,9 +120,12 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		if text == "" {
 			continue
 		}
-
+		if time.Since(client.lastMessage) < 200*time.Millisecond {
+			continue
+		}
+		client.lastMessage = time.Now()
 		if strings.HasPrefix(text, "/") {
-			fmt.Println("command:", text)
+			fmt.Println("command:", client.name, "->", text)
 
 			if handleCommand(client, text) {
 				continue

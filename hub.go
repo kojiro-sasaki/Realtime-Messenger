@@ -101,8 +101,12 @@ func handleCommand(c *Client, text string) bool {
 
 	if text == "/help" {
 		sendJSON(c, Message{
-			Type:    "system",
-			Message: "/users, /msg <user> <msg>, /name <newname>, /help",
+			Type: "system",
+			Message: "Commands:\n" +
+				"/users - list users\n" +
+				"/msg <user> <message>\n" +
+				"/name <newname>\n" +
+				"/help",
 		})
 		return true
 	}
