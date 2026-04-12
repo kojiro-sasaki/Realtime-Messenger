@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -16,15 +17,17 @@ var upgrader = websocket.Upgrader{
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		fmt.Println("Upgrader error", err)
+		fmt.Println("upgrade error:", err)
 		return
 	}
+
+	conn.SetReadLimit(1024)
 	conn.SetReadDeadline(time.Now().Add(120 * time.Second))
 	conn.SetPongHandler(func(string) error {
 		conn.SetReadDeadline(time.Now().Add(120 * time.Second))
 		return nil
 	})
-	conn.SetReadLimit(1024)
+
 	_, name, err := conn.ReadMessage()
 	if err != nil {
 		conn.Close()
@@ -38,15 +41,17 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isNameTaken(nameStr) {
-		conn.WriteMessage(websocket.TextMessage, []byte("[SYSTEM] Name already taken"))
+		data, _ := json.Marshal(Message{
+			Type:    "system",
+			Message: "Name already taken",
+		})
+		conn.WriteMessage(websocket.TextMessage, data)
 		conn.Close()
 		return
 	}
 
-	client := &Client{
-		conn: conn,
-		name: nameStr,
-	}
+	client := &Client{conn: conn, name: nameStr}
+
 	go func() {
 		ticker := time.NewTicker(60 * time.Second)
 		defer ticker.Stop()
@@ -63,22 +68,31 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
+
 	mu.Lock()
 	clients[client] = true
 	mu.Unlock()
-	fmt.Println("client connected:", client.name)
-	broadcast([]byte("[SYSTEM] " + client.name + " joined the chat"))
+
+	fmt.Println("connected:", client.name)
+
+	broadcastJSON(Message{
+		Type:    "system",
+		Message: client.name + " joined the chat",
+	})
 
 	defer func() {
-		fmt.Println("client disconnected:", client.name)
 		removeClient(client)
-		broadcast([]byte("[SYSTEM] " + client.name + " left the chat"))
+		fmt.Println("disconnected:", client.name)
+
+		broadcastJSON(Message{
+			Type:    "system",
+			Message: client.name + " left the chat",
+		})
 	}()
 
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			fmt.Println("read error:", err)
 			break
 		}
 
@@ -86,15 +100,23 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		if text == "" {
 			continue
 		}
+
 		if handleCommand(client, text) {
 			continue
 		}
+
 		if len(text) > 500 {
-			if err := sendToClient(client, []byte("[SYSTEM] Message too long")); err != nil {
-				return
-			}
+			sendJSON(client, Message{
+				Type:    "system",
+				Message: "Message too long",
+			})
 			continue
 		}
-		broadcast([]byte(client.name + ": " + text))
+
+		broadcastJSON(Message{
+			Type:    "message",
+			Sender:  client.name,
+			Message: text,
+		})
 	}
 }
