@@ -12,4 +12,5 @@ type Client struct {
 	name        string
 	mu          sync.Mutex
 	lastMessage time.Time
+	room        string
 }

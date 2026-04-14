@@ -180,6 +180,32 @@ func handleCommand(c *Client, text string) bool {
 
 		return true
 	}
+	if strings.HasPrefix(text, "/join") {
+		parts := strings.SplitN(text, " ", 2)
+		if len(parts) < 2 {
+			sendJSON(c, Message{
+				Type:    "system",
+				Message: "Usage : /join <room>",
+			})
+			return true
+		}
+		newroom := strings.TrimSpace(parts[1])
+		if newroom == "" {
+			sendJSON(c, Message{
+				Type:    "system",
+				Message: "Invalid room",
+			})
+			return true
+		}
+		oldroom := c.room
+		c.room = newroom
+		sendJSON(c, Message{
+			Type:    "system",
+			Message: "You joined  room:" + newroom,
+		})
+		broadcasttoRoom()
+	}
+
 	return false
 }
 func broadcastJSON(v any) {
@@ -197,4 +223,22 @@ func sendJSON(c *Client, v any) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.conn.WriteMessage(websocket.TextMessage, data)
+}
+func broadcasttoRoom(room string, msg []byte) {
+	mu.Lock()
+	var conns []*Client
+	for c := range clients {
+		if c.room == room {
+			conns = append(conns, c)
+		}
+	}
+	mu.Unlock()
+	for _, c := range conns {
+		c.mu.Lock()
+		err := c.conn.WriteMessage(websocket.TextMessage, msg)
+		c.mu.Unlock()
+		if err != nil {
+			removeClient(c)
+		}
+	}
 }
