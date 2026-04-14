@@ -140,9 +140,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		broadcastJSON(Message{
+		broadcastJSONtoRoom(client.room, Message{
 			Type:    "message",
-			Sender:  client.name,
+			Sender:  "[" + client.room + "] " + client.name,
 			Message: text,
 		})
 	}

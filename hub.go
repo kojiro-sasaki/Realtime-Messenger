@@ -230,18 +230,19 @@ func handleCommand(c *Client, text string) bool {
 		})
 		return true
 	}
-	if text == "/rooms" {
+	if strings.HasPrefix(text, "/rooms") {
 		sendJSON(c, Message{
 			Type:    "system",
 			Message: "List of available rooms : " + strings.Join(getRooms(), ", "),
 		})
 		return true
 	}
-	if text == "/rusers" {
+	if strings.HasPrefix(text, "/rusers") {
 		sendJSON(c, Message{
 			Type:    "system",
 			Message: "List of user in this room" + strings.Join(getusersfromRoom(c.room), ", "),
 		})
+		return true
 	}
 	return false
 }
