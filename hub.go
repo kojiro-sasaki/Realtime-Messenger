@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
 	"sync"
 
@@ -11,6 +12,13 @@ import (
 var mu sync.Mutex
 
 var clients = make(map[*Client]bool)
+
+var allowedRooms = map[string]bool{
+	"general": true,
+	"dev":     true,
+	"gaming":  true,
+	"sport":   true,
+}
 
 type Message struct {
 	Type    string `json:"type"`
@@ -189,11 +197,18 @@ func handleCommand(c *Client, text string) bool {
 			})
 			return true
 		}
-		newRoom := strings.TrimSpace(parts[1])
+		newRoom := strings.ToLower(strings.TrimSpace(parts[1]))
 		if newRoom == "" {
 			sendJSON(c, Message{
 				Type:    "system",
 				Message: "Invalid room",
+			})
+			return true
+		}
+		if !allowedRooms[newRoom] {
+			sendJSON(c, Message{
+				Type:    "system",
+				Message: "Room doesnt exist",
 			})
 			return true
 		}
@@ -212,6 +227,20 @@ func handleCommand(c *Client, text string) bool {
 		broadcastJSONtoRoom(newRoom, Message{
 			Type:    "system",
 			Message: c.name + " join the room",
+		})
+		return true
+	}
+	if text == "/rooms" {
+		sendJSON(c, Message{
+			Type:    "system",
+			Message: "List of available rooms : " + strings.Join(getRooms(), ", "),
+		})
+		return true
+	}
+	if text == "/rusers" {
+		sendJSON(c, Message{
+			Type:    "system",
+			Message: "List of user in this room" + strings.Join(getusersfromRoom(c.room), ", "),
 		})
 	}
 	return false
@@ -256,4 +285,23 @@ func broadcastJSONtoRoom(room string, v any) {
 		return
 	}
 	broadcasttoRoom(room, data)
+}
+func getRooms() []string {
+	var rooms []string
+	for r := range allowedRooms {
+		rooms = append(rooms, r)
+	}
+	sort.Strings(rooms)
+	return rooms
+}
+func getusersfromRoom(room string) []string {
+	mu.Lock()
+	defer mu.Unlock()
+	var users []string
+	for c := range clients {
+		if c.room == room {
+			users = append(users, c.name)
+		}
+	}
+	return users
 }
