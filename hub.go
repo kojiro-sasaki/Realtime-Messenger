@@ -180,7 +180,7 @@ func handleCommand(c *Client, text string) bool {
 
 		return true
 	}
-	if strings.HasPrefix(text, "/join") {
+	if strings.HasPrefix(text, "/join ") {
 		parts := strings.SplitN(text, " ", 2)
 		if len(parts) < 2 {
 			sendJSON(c, Message{
@@ -189,23 +189,31 @@ func handleCommand(c *Client, text string) bool {
 			})
 			return true
 		}
-		newroom := strings.TrimSpace(parts[1])
-		if newroom == "" {
+		newRoom := strings.TrimSpace(parts[1])
+		if newRoom == "" {
 			sendJSON(c, Message{
 				Type:    "system",
 				Message: "Invalid room",
 			})
 			return true
 		}
+		c.mu.Lock()
 		oldroom := c.room
-		c.room = newroom
+		c.room = newRoom
+		c.mu.Unlock()
 		sendJSON(c, Message{
 			Type:    "system",
-			Message: "You joined  room:" + newroom,
+			Message: "You joined  room:" + newRoom,
 		})
-		broadcasttoRoom()
+		broadcastJSONtoRoom(oldroom, Message{
+			Type:    "system",
+			Message: c.name + " left the room",
+		})
+		broadcastJSONtoRoom(newRoom, Message{
+			Type:    "system",
+			Message: c.name + " join the room",
+		})
 	}
-
 	return false
 }
 func broadcastJSON(v any) {
@@ -241,4 +249,11 @@ func broadcasttoRoom(room string, msg []byte) {
 			removeClient(c)
 		}
 	}
+}
+func broadcastJSONtoRoom(room string, v any) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return
+	}
+	broadcasttoRoom(room, data)
 }
