@@ -233,6 +233,92 @@ func handleCommand(c *Client, text string) bool {
 		changeRoom(c, "general")
 		return true
 	}
+	if strings.HasPrefix(text, "/kick ") {
+		if !hasPermission(c, roleMod) {
+			sendJSON(c, Message{
+				Type:    "system",
+				Message: "No permission",
+			})
+			return true
+		}
+		parts := strings.SplitN(text, " ", 2)
+		targetName := strings.TrimSpace(parts[1])
+		target := findClient(targetName)
+		if target == nil {
+			sendJSON(c, Message{
+				Type:    "system",
+				Message: "User not found",
+			})
+			return true
+		}
+		removeClient(target)
+		broadcastJSON(Message{
+			Type:    "system",
+			Message: target.name + " was kicked by " + c.name,
+		})
+		return true
+	}
+	if strings.HasPrefix(text, "/role ") {
+		if !hasPermission(c, roleAdmin) {
+			sendJSON(c, Message{
+				Type:    "system",
+				Message: "No permission",
+			})
+			return true
+		}
+
+		parts := strings.SplitN(text, " ", 3)
+		if len(parts) < 3 {
+			sendJSON(c, Message{
+				Type:    "system",
+				Message: "Usage: /role <username> <role>",
+			})
+			return true
+		}
+
+		targetName := strings.TrimSpace(parts[1])
+		newRole := strings.TrimSpace(parts[2])
+
+		target := findClient(targetName)
+		if target == nil {
+			sendJSON(c, Message{
+				Type:    "system",
+				Message: "User not found",
+			})
+			return true
+		}
+
+		target.mu.Lock()
+		switch newRole {
+		case "user":
+			target.role = roleUser
+		case "mod":
+			target.role = roleMod
+		case "admin":
+			target.role = roleAdmin
+		default:
+			target.mu.Unlock()
+			sendJSON(c, Message{
+				Type:    "system",
+				Message: "Invalid role (user/mod/admin)",
+			})
+			return true
+		}
+		updatedRole := target.role
+		target.mu.Unlock()
+
+		sendJSON(target, Message{
+			Type:    "system",
+			Message: "Your role is now " + updatedRole,
+		})
+
+		sendJSON(c, Message{
+			Type:    "system",
+			Message: target.name + " is now " + updatedRole,
+		})
+
+		return true
+	}
 	return false
 }
 func broadcastJSON(v any) {
@@ -322,4 +408,13 @@ func changeRoom(c *Client, newroom string) {
 		Type:    "system",
 		Message: "You moved to " + newroom,
 	})
+}
+func hasPermission(c *Client, required string) bool {
+	roles := map[string]int{
+		roleUser:  1,
+		roleMod:   2,
+		roleAdmin: 3,
+	}
+
+	return roles[c.role] >= roles[required]
 }
