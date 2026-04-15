@@ -212,22 +212,7 @@ func handleCommand(c *Client, text string) bool {
 			})
 			return true
 		}
-		c.mu.Lock()
-		oldroom := c.room
-		c.room = newRoom
-		c.mu.Unlock()
-		sendJSON(c, Message{
-			Type:    "system",
-			Message: "You joined  room:" + newRoom,
-		})
-		broadcastJSONtoRoom(oldroom, Message{
-			Type:    "system",
-			Message: c.name + " left the room",
-		})
-		broadcastJSONtoRoom(newRoom, Message{
-			Type:    "system",
-			Message: c.name + " join the room",
-		})
+		changeRoom(c, newRoom)
 		return true
 	}
 	if strings.HasPrefix(text, "/rooms") {
@@ -242,6 +227,10 @@ func handleCommand(c *Client, text string) bool {
 			Type:    "system",
 			Message: "List of user in this room" + strings.Join(getusersfromRoom(c.room), ", "),
 		})
+		return true
+	}
+	if text == "/leave" {
+		changeRoom(c, "general")
 		return true
 	}
 	return false
@@ -305,4 +294,32 @@ func getusersfromRoom(room string) []string {
 		}
 	}
 	return users
+}
+func changeRoom(c *Client, newroom string) {
+	c.mu.Lock()
+	oldRoom := c.room
+	if oldRoom == newroom {
+		c.mu.Unlock()
+		sendJSON(c, Message{
+			Type:    "system",
+			Message: "You are already in room" + newroom,
+		})
+		return
+	}
+	c.room = newroom
+	c.mu.Unlock()
+	if oldRoom != "" {
+		broadcastJSONtoRoom(oldRoom, Message{
+			Type:    "system",
+			Message: c.name + " left the room",
+		})
+	}
+	broadcastJSONtoRoom(newroom, Message{
+		Type:    "system",
+		Message: c.name + " joined the room",
+	})
+	sendJSON(c, Message{
+		Type:    "system",
+		Message: "You moved to " + newroom,
+	})
 }
