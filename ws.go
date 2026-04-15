@@ -67,7 +67,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := &Client{conn: conn, name: nameStr}
+	client := &Client{conn: conn, name: nameStr, room: "general"}
 
 	go func() {
 		ticker := time.NewTicker(60 * time.Second)
@@ -92,7 +92,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println("connected:", client.name)
 
-	broadcastJSON(Message{
+	broadcastJSONtoRoom(client.room, Message{
 		Type:    "system",
 		Message: client.name + " joined the chat",
 	})
@@ -101,7 +101,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		removeClient(client)
 		fmt.Println("disconnected:", client.name)
 
-		broadcastJSON(Message{
+		broadcastJSONtoRoom(client.room, Message{
 			Type:    "system",
 			Message: client.name + " left the chat",
 		})
