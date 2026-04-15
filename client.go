@@ -13,4 +13,11 @@ type Client struct {
 	mu          sync.Mutex
 	lastMessage time.Time
 	room        string
+	role        string
 }
+
+const (
+	roleUser  = "user"
+	roleAdmin = "admin"
+	roleMod   = "mod"
+)
