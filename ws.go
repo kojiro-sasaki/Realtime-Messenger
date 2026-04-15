@@ -66,8 +66,11 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 		return
 	}
-
-	client := &Client{conn: conn, name: nameStr, room: "general"}
+	role := roleUser
+	if nameStr == "admin123" {
+		role = roleAdmin
+	}
+	client := &Client{conn: conn, name: nameStr, room: "general", role: role}
 
 	go func() {
 		ticker := time.NewTicker(60 * time.Second)
@@ -123,7 +126,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		if time.Since(client.lastMessage) < 200*time.Millisecond {
 			continue
 		}
+		client.mu.Lock()
 		client.lastMessage = time.Now()
+		client.mu.Unlock()
 		if strings.HasPrefix(text, "/") {
 			fmt.Println("command:", client.name, "->", text)
 
@@ -142,7 +147,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 		broadcastJSONtoRoom(client.room, Message{
 			Type:    "message",
-			Sender:  "[" + client.room + "] " + client.name,
+			Sender:  "[" + client.room + "] " + "[" + client.role + "] " + client.name,
 			Message: text,
 		})
 	}
