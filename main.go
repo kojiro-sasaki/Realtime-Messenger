@@ -11,6 +11,8 @@ import (
 
 func main() {
 	http.HandleFunc("/ws", wsHandler)
+	http.HandleFunc("/register", registerHandler)
+	http.HandleFunc("/login", loginHandler)
 	http.Handle("/", http.FileServer(http.Dir("./static")))
 	server := &http.Server{
 		Addr: ":8080",

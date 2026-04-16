@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -317,6 +318,30 @@ func handleCommand(c *Client, text string) bool {
 			Message: target.name + " is now " + updatedRole,
 		})
 
+		return true
+	}
+	if strings.HasPrefix(text, "/whois ") {
+		parts := strings.SplitN(text, " ", 2)
+		if len(parts) < 2 {
+			sendJSON(c, Message{
+				Type:    "system",
+				Message: "Usage : /whois <name>",
+			})
+			return true
+		}
+		name := strings.TrimSpace(parts[1])
+		target := findClient(name)
+		if target == nil {
+			sendJSON(c, Message{
+				Type:    "system",
+				Message: "Client not found",
+			})
+			return true
+		}
+		sendJSON(c, Message{
+			Type:    "system",
+			Message: fmt.Sprintf("Name: %s \n,Role : %s\n ,Room :%s\n ", target.name, target.role, target.room),
+		})
 		return true
 	}
 	return false
