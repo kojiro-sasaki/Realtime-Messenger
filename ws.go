@@ -14,7 +14,8 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 		return origin == "http://localhost:8080"
-	}}
+	},
+}
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -68,11 +69,25 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 		return
 	}
+
 	role := roleUser
 	if nameStr == "admin123" {
 		role = roleAdmin
 	}
-	client := &Client{conn: conn, name: nameStr, room: "general", role: role}
+
+	id, err := getUserID(nameStr)
+	if err != nil {
+		conn.Close()
+		return
+	}
+
+	client := &Client{
+		conn: conn,
+		id:   id,
+		name: nameStr,
+		room: "general",
+		role: role,
+	}
 
 	go func() {
 		ticker := time.NewTicker(60 * time.Second)
@@ -125,12 +140,15 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		if text == "" {
 			continue
 		}
+
+		client.mu.Lock()
 		if time.Since(client.lastMessage) < 200*time.Millisecond {
+			client.mu.Unlock()
 			continue
 		}
-		client.mu.Lock()
 		client.lastMessage = time.Now()
 		client.mu.Unlock()
+
 		if strings.HasPrefix(text, "/") {
 			fmt.Println("command:", client.name, "->", text)
 
@@ -145,6 +163,15 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 				Message: "Message too long",
 			})
 			continue
+		}
+
+		_, err = db.Exec(
+			"INSERT INTO messages (sender, text) VALUES (?, ?)",
+			client.name,
+			text,
+		)
+		if err != nil {
+			fmt.Println("db error:", err)
 		}
 
 		broadcastJSONtoRoom(client.room, Message{
