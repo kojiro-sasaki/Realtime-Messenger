@@ -31,13 +31,13 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 
-	_, name, err := conn.ReadMessage()
+	cookie, err := r.Cookie("user")
 	if err != nil {
 		conn.Close()
 		return
 	}
 
-	nameStr := strings.ToLower(strings.TrimSpace(string(name)))
+	nameStr := strings.ToLower(strings.TrimSpace(cookie.Value))
 	if nameStr == "" {
 		conn.Close()
 		return
