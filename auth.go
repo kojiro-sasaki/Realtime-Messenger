@@ -24,13 +24,11 @@ func checkPass(hash, password string) bool {
 
 func registerHandler(w http.ResponseWriter, r *http.Request) {
 
-	// 👉 если GET — отдать HTML
 	if r.Method == http.MethodGet {
 		http.ServeFile(w, r, "./static/register.html")
 		return
 	}
 
-	// 👉 если POST — обрабатываем регистрацию
 	if r.Method == http.MethodPost {
 		var u User
 
@@ -73,27 +71,49 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-	var u User
-	if r.Method != http.MethodPost {
-		w.Write([]byte("use POST with JSON"))
-		return
-	}
-	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
+
+	if r.Method == http.MethodGet {
+		http.ServeFile(w, r, "./static/login.html")
 		return
 	}
 
-	var hash string
+	if r.Method == http.MethodPost {
+		var u User
 
-	err := db.QueryRow(
-		"SELECT password FROM users WHERE username=?",
-		u.Username,
-	).Scan(&hash)
+		if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
 
-	if err != nil || !checkPass(hash, u.Password) {
-		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		var hash string
+
+		err := db.QueryRow(
+			"SELECT password FROM users WHERE username=?",
+			u.Username,
+		).Scan(&hash)
+
+		if err != nil || !checkPass(hash, u.Password) {
+			http.Error(w, "invalid credentials", http.StatusUnauthorized)
+			return
+		}
+
+		http.SetCookie(w, &http.Cookie{
+			Name:  "user",
+			Value: u.Username,
+			Path:  "/",
+		})
+
+		w.Write([]byte("login success"))
 		return
 	}
 
-	w.Write([]byte("login success"))
+	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+}
+
+func isAuthenticated(r *http.Request) (string, bool) {
+	cookie, err := r.Cookie("user")
+	if err != nil {
+		return "", false
+	}
+	return cookie.Value, true
 }
