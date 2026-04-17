@@ -10,10 +10,13 @@ import (
 )
 
 func main() {
+	initDB()
+	createTables()
 	http.HandleFunc("/ws", wsHandler)
 	http.HandleFunc("/register", registerHandler)
 	http.HandleFunc("/login", loginHandler)
 	http.Handle("/", http.FileServer(http.Dir("./static")))
+
 	server := &http.Server{
 		Addr: ":8080",
 	}
