@@ -339,8 +339,9 @@ func handleCommand(c *Client, text string) bool {
 			return true
 		}
 		sendJSON(c, Message{
-			Type:    "system",
-			Message: fmt.Sprintf("Name: %s \n,Role : %s\n ,Room :%s\n ", target.name, target.role, target.room),
+			Type: "system",
+			Message: fmt.Sprintf("Name:%s\nRole:%s\nRoom%s\n",
+				target.name, target.role, target.room),
 		})
 		return true
 	}
