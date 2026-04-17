@@ -1,0 +1,30 @@
+<form id="login">
+  <input name="username" placeholder="username" />
+  <input name="password" type="password" />
+  <button>Login</button>
+</form>
+
+<button onclick="location.href = '/register'">Register</button>
+
+<script>
+  document.getElementById("login").onsubmit = async (e) => {
+    e.preventDefault();
+
+    const form = e.target;
+
+    const res = await fetch("/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: form.username.value,
+        password: form.password.value,
+      }),
+    });
+
+    if (res.ok) {
+      window.location.href = "/";
+    } else {
+      alert("login failed");
+    }
+  };
+</script>

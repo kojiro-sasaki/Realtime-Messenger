@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <title>Go Chat</title>
+
     <style>
       body {
         font-family: Arial;
@@ -12,6 +13,14 @@
         flex-direction: column;
         align-items: center;
       }
+
+      #topbar {
+        width: 500px;
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+
       #chat {
         width: 500px;
         height: 400px;
@@ -20,27 +29,34 @@
         padding: 10px;
         margin-bottom: 10px;
       }
+
       input {
         padding: 10px;
         margin: 5px;
         width: 300px;
       }
+
       button {
         padding: 10px;
       }
+
       .system {
         color: #888;
       }
+
       .dm {
         color: #4caf50;
       }
     </style>
   </head>
+
   <body>
     <h2>Go WebSocket Chat</h2>
 
-    <input id="name" placeholder="Enter your name" />
-    <button onclick="connect()">Connect</button>
+    <div id="topbar">
+      <span id="user"></span>
+      <button onclick="logout()">Logout</button>
+    </div>
 
     <div id="chat"></div>
 
@@ -54,12 +70,16 @@
     <script>
       let ws;
 
+      function getUsernameFromCookie() {
+        const match = document.cookie.match(/(^| )user=([^;]+)/);
+        return match ? match[2] : "unknown";
+      }
+
       function connect() {
-        const name = document.getElementById("name").value;
         ws = new WebSocket("ws://localhost:8080/ws");
 
         ws.onopen = () => {
-          ws.send(name);
+          console.log("connected");
         };
 
         ws.onmessage = (event) => {
@@ -73,14 +93,21 @@
       }
 
       function send() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          alert("Not connected yet");
+          return;
+        }
+
         const input = document.getElementById("msg");
+
+        if (input.value.trim() === "") return;
+
         ws.send(input.value);
         input.value = "";
       }
 
       function addMessage(data) {
         const chat = document.getElementById("chat");
-
         const div = document.createElement("div");
 
         if (data.type === "system") {
@@ -100,6 +127,14 @@
       function addSystem(msg) {
         addMessage({ type: "system", message: msg });
       }
+
+      function logout() {
+        window.location.href = "/logout";
+      }
+
+      document.getElementById("user").innerText = "@" + getUsernameFromCookie();
+
+      connect();
     </script>
   </body>
 </html>
