@@ -10,6 +10,7 @@ import (
 type Client struct {
 	conn        *websocket.Conn
 	name        string
+	send        chan []byte
 	id          int
 	mu          sync.Mutex
 	lastMessage time.Time

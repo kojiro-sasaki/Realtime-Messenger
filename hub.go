@@ -69,19 +69,13 @@ func (h *Hub) getUsernames() []string {
 	return names
 }
 
-func isNameTaken(name string) bool {
-	mu.Lock()
-	defer mu.Unlock()
-	for c := range clients {
+func (h *Hub) isNameTaken(name string) bool {
+	for c := range h.clients {
 		if c.name == name {
 			return true
 		}
 	}
 	return false
-}
-
-func (h *Hub) removeClient(c *Client) {
-	delete(h.clients, c)
 }
 func (h *Hub) findClient(name string) *Client {
 	for c := range h.clients {
@@ -91,8 +85,29 @@ func (h *Hub) findClient(name string) *Client {
 	}
 	return nil
 }
+func (c *Client) readConn(h *Hub) {
+	defer func() {
+		h.unregister <- c
+		c.conn.Close()
+	}()
+	for {
+		_, msg, err := c.conn.ReadMessage()
+		if err != nil {
+			break
+		}
+		h.broadcast <- msg
+	}
+}
+func (c *Client) writeConn() {
+	for msg := range c.send {
+		err := c.conn.WriteMessage(websocket.TextMessage, msg)
+		if err != nil {
+			return
+		}
+	}
+}
 func sendPrivateMessage(sender *Client, recipient string, msg string) {
-	target := findClient(recipient)
+	target := h.findClient(recipient)
 
 	if target == nil {
 		sendJSON(sender, Message{
@@ -356,21 +371,24 @@ func handleCommand(c *Client, text string) bool {
 	}
 	return false
 }
-func broadcastJSON(v any) {
+func (h *Hub) broadcastJSON(v any) {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return
 	}
-	broadcast(data)
+	h.broadcast <- data
 }
 func sendJSON(c *Client, v any) error {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.conn.WriteMessage(websocket.TextMessage, data)
+	select {
+	case c.send <- data:
+	default:
+		return fmt.Errorf("client overloaded")
+	}
+	return nil
 }
 func broadcasttoRoom(room string, msg []byte) {
 	mu.Lock()
