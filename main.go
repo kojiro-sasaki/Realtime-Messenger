@@ -14,6 +14,19 @@ func main() {
 	createTables()
 	h := newHub()
 	go h.Run()
+	for i := 0; i < 3; i++ {
+		go func() {
+			for msg := range h.dbChan {
+				if _, err := db.Exec(
+					"INSERT INTO messages (sender, text) VALUES (?, ?)",
+					msg.Sender,
+					msg.Message,
+				); err != nil {
+					fmt.Println("db error:", err)
+				}
+			}
+		}()
+	}
 	http.HandleFunc("/ws", wsHandler(h))
 	http.HandleFunc("/register", registerHandler)
 	http.HandleFunc("/login", loginHandler)
