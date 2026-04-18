@@ -5,14 +5,16 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/gorilla/websocket"
 )
 
-var mu sync.Mutex
-
-var clients = make(map[*Client]bool)
+type Hub struct {
+	clients    map[*Client]bool
+	broadcast  chan []byte
+	register   chan *Client
+	unregister chan *Client
+}
 
 var allowedRooms = map[string]bool{
 	"general": true,
@@ -27,28 +29,41 @@ type Message struct {
 	Message string `json:"message,omitempty"`
 }
 
-func broadcast(msg []byte) {
-	mu.Lock()
-	var conns []*Client
-	for c := range clients {
-		conns = append(conns, c)
+func newHub() *Hub {
+	return &Hub{
+		clients:    make(map[*Client]bool),
+		broadcast:  make(chan []byte),
+		register:   make(chan *Client),
+		unregister: make(chan *Client),
 	}
-	mu.Unlock()
-	for _, c := range conns {
-		c.mu.Lock()
-		err := c.conn.WriteMessage(websocket.TextMessage, msg)
-		c.mu.Unlock()
-		if err != nil {
-			removeClient(c)
+}
+func (h *Hub) Run() {
+	for {
+		select {
+		case client := <-h.register:
+			h.clients[client] = true
+		case client := <-h.unregister:
+			if _, ok := h.clients[client]; ok {
+				delete(h.clients, client)
+				close(client.send)
+			}
+		case msg := <-h.broadcast:
+			for client := range h.clients {
+				select {
+				case client.send <- msg:
+				default:
+					close(client.send)
+					delete(h.clients, client)
+				}
+			}
 		}
+
 	}
 }
 
-func getUsernames() []string {
-	mu.Lock()
-	defer mu.Unlock()
+func (h *Hub) getUsernames() []string {
 	var names []string
-	for c := range clients {
+	for c := range h.clients {
 		names = append(names, c.name)
 	}
 	return names
@@ -65,17 +80,11 @@ func isNameTaken(name string) bool {
 	return false
 }
 
-func removeClient(c *Client) {
-	mu.Lock()
-	delete(clients, c)
-	mu.Unlock()
-	c.conn.Close()
+func (h *Hub) removeClient(c *Client) {
+	delete(h.clients, c)
 }
-func findClient(name string) *Client {
-	mu.Lock()
-	defer mu.Unlock()
-
-	for c := range clients {
+func (h *Hub) findClient(name string) *Client {
+	for c := range h.clients {
 		if c.name == name {
 			return c
 		}
