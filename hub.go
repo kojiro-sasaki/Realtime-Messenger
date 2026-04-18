@@ -5,15 +5,41 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
 
+type findRequest struct {
+	name string
+	resp chan *Client
+}
+
+type userRequest struct {
+	resp chan []string
+}
+type roomUserRequest struct {
+	room string
+	resp chan []string
+}
+type nameTakenRequest struct {
+	name string
+	resp chan bool
+}
 type Hub struct {
-	clients    map[*Client]bool
-	broadcast  chan []byte
-	register   chan *Client
-	unregister chan *Client
+	clients       map[*Client]bool
+	broadcast     chan []byte
+	roombroadcast chan RoomMessage
+	register      chan *Client
+	unregister    chan *Client
+	findReq       chan findRequest
+	usersReq      chan userRequest
+	roomUsersReq  chan roomUserRequest
+	nameReq       chan nameTakenRequest
+}
+type RoomMessage struct {
+	room string
+	data []byte
 }
 
 var allowedRooms = map[string]bool{
@@ -31,22 +57,30 @@ type Message struct {
 
 func newHub() *Hub {
 	return &Hub{
-		clients:    make(map[*Client]bool),
-		broadcast:  make(chan []byte),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
+		clients:       make(map[*Client]bool),
+		broadcast:     make(chan []byte),
+		roombroadcast: make(chan RoomMessage),
+		register:      make(chan *Client),
+		unregister:    make(chan *Client),
+		findReq:       make(chan findRequest),
+		usersReq:      make(chan userRequest),
+		roomUsersReq:  make(chan roomUserRequest),
+		nameReq:       make(chan nameTakenRequest),
 	}
 }
 func (h *Hub) Run() {
 	for {
 		select {
+
 		case client := <-h.register:
 			h.clients[client] = true
+
 		case client := <-h.unregister:
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
 				close(client.send)
 			}
+
 		case msg := <-h.broadcast:
 			for client := range h.clients {
 				select {
@@ -56,40 +90,64 @@ func (h *Hub) Run() {
 					delete(h.clients, client)
 				}
 			}
-		}
 
+		case rm := <-h.roombroadcast:
+			for client := range h.clients {
+				if client.room == rm.room {
+					select {
+					case client.send <- rm.data:
+					default:
+						close(client.send)
+						delete(h.clients, client)
+					}
+				}
+			}
+		case req := <-h.findReq:
+			var res *Client
+			for c := range h.clients {
+				if c.name == req.name {
+					res = c
+					break
+				}
+			}
+			req.resp <- res
+		case req := <-h.usersReq:
+			var names []string
+			for c := range h.clients {
+				names = append(names, c.name)
+			}
+			req.resp <- names
+
+		case req := <-h.roomUsersReq:
+			var users []string
+			for c := range h.clients {
+				if c.room == req.room {
+					users = append(users, c.name)
+				}
+			}
+			req.resp <- users
+
+		case req := <-h.nameReq:
+			taken := false
+			for c := range h.clients {
+				if c.name == req.name {
+					taken = true
+					break
+				}
+			}
+			req.resp <- taken
+		}
 	}
 }
 
-func (h *Hub) getUsernames() []string {
-	var names []string
-	for c := range h.clients {
-		names = append(names, c.name)
-	}
-	return names
-}
-
-func (h *Hub) isNameTaken(name string) bool {
-	for c := range h.clients {
-		if c.name == name {
-			return true
-		}
-	}
-	return false
-}
-func (h *Hub) findClient(name string) *Client {
-	for c := range h.clients {
-		if c.name == name {
-			return c
-		}
-	}
-	return nil
-}
 func (c *Client) readConn(h *Hub) {
 	defer func() {
 		h.unregister <- c
 		c.conn.Close()
 	}()
+
+	c.conn.SetReadLimit(512)
+
 	for {
 		_, msg, err := c.conn.ReadMessage()
 		if err != nil {
@@ -100,13 +158,14 @@ func (c *Client) readConn(h *Hub) {
 }
 func (c *Client) writeConn() {
 	for msg := range c.send {
+		c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 		err := c.conn.WriteMessage(websocket.TextMessage, msg)
 		if err != nil {
 			return
 		}
 	}
 }
-func sendPrivateMessage(sender *Client, recipient string, msg string) {
+func (h *Hub) sendPrivateMessage(sender *Client, recipient string, msg string) {
 	target := h.findClient(recipient)
 
 	if target == nil {
@@ -130,7 +189,7 @@ func sendPrivateMessage(sender *Client, recipient string, msg string) {
 	})
 }
 
-func handleCommand(c *Client, text string) bool {
+func handleCommand(h *Hub, c *Client, text string) bool {
 
 	if text == "/help" {
 		sendJSON(c, Message{
@@ -145,7 +204,7 @@ func handleCommand(c *Client, text string) bool {
 	}
 
 	if text == "/users" {
-		names := getUsernames()
+		names := h.getUsernames()
 		sendJSON(c, Message{
 			Type:    "system",
 			Message: "Users: " + strings.Join(names, ", "),
@@ -164,7 +223,7 @@ func handleCommand(c *Client, text string) bool {
 			return true
 		}
 
-		sendPrivateMessage(c, parts[1], parts[2])
+		h.sendPrivateMessage(c, parts[1], parts[2])
 		return true
 	}
 
@@ -189,7 +248,7 @@ func handleCommand(c *Client, text string) bool {
 			return true
 		}
 
-		if isNameTaken(newname) {
+		if h.isNameTaken(newname) {
 			sendJSON(c, Message{
 				Type:    "system",
 				Message: "Name already taken",
@@ -206,7 +265,7 @@ func handleCommand(c *Client, text string) bool {
 			Message: "Name changed to " + newname,
 		})
 
-		broadcastJSON(Message{
+		h.broadcastJSON(Message{
 			Type:    "system",
 			Message: old + " changed name to " + newname,
 		})
@@ -237,7 +296,7 @@ func handleCommand(c *Client, text string) bool {
 			})
 			return true
 		}
-		changeRoom(c, newRoom)
+		changeRoom(h, c, newRoom)
 		return true
 	}
 	if strings.HasPrefix(text, "/rooms") {
@@ -250,12 +309,12 @@ func handleCommand(c *Client, text string) bool {
 	if text == "/rusers" {
 		sendJSON(c, Message{
 			Type:    "system",
-			Message: "List of user in this room" + strings.Join(getusersfromRoom(c.room), ", "),
+			Message: "List of user in this room" + strings.Join(h.getusersfromRoom(c.room), ", "),
 		})
 		return true
 	}
 	if text == "/leave" {
-		changeRoom(c, "general")
+		changeRoom(h, c, "general")
 		return true
 	}
 	if strings.HasPrefix(text, "/kick ") {
@@ -268,7 +327,7 @@ func handleCommand(c *Client, text string) bool {
 		}
 		parts := strings.SplitN(text, " ", 2)
 		targetName := strings.TrimSpace(parts[1])
-		target := findClient(targetName)
+		target := h.findClient(targetName)
 		if target == nil {
 			sendJSON(c, Message{
 				Type:    "system",
@@ -276,8 +335,8 @@ func handleCommand(c *Client, text string) bool {
 			})
 			return true
 		}
-		removeClient(target)
-		broadcastJSON(Message{
+		h.unregister <- target
+		h.broadcastJSON(Message{
 			Type:    "system",
 			Message: target.name + " was kicked by " + c.name,
 		})
@@ -304,7 +363,7 @@ func handleCommand(c *Client, text string) bool {
 		targetName := strings.TrimSpace(parts[1])
 		newRole := strings.TrimSpace(parts[2])
 
-		target := findClient(targetName)
+		target := h.findClient(targetName)
 		if target == nil {
 			sendJSON(c, Message{
 				Type:    "system",
@@ -354,7 +413,7 @@ func handleCommand(c *Client, text string) bool {
 			return true
 		}
 		name := strings.TrimSpace(parts[1])
-		target := findClient(name)
+		target := h.findClient(name)
 		if target == nil {
 			sendJSON(c, Message{
 				Type:    "system",
@@ -390,30 +449,15 @@ func sendJSON(c *Client, v any) error {
 	}
 	return nil
 }
-func broadcasttoRoom(room string, msg []byte) {
-	mu.Lock()
-	var conns []*Client
-	for c := range clients {
-		if c.room == room {
-			conns = append(conns, c)
-		}
-	}
-	mu.Unlock()
-	for _, c := range conns {
-		c.mu.Lock()
-		err := c.conn.WriteMessage(websocket.TextMessage, msg)
-		c.mu.Unlock()
-		if err != nil {
-			removeClient(c)
-		}
-	}
-}
-func broadcastJSONtoRoom(room string, v any) {
+func (h *Hub) broadcastJSONtoRoom(room string, v any) {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return
 	}
-	broadcasttoRoom(room, data)
+	h.roombroadcast <- RoomMessage{
+		room: room,
+		data: data,
+	}
 }
 func getRooms() []string {
 	var rooms []string
@@ -423,45 +467,39 @@ func getRooms() []string {
 	sort.Strings(rooms)
 	return rooms
 }
-func getusersfromRoom(room string) []string {
-	mu.Lock()
-	defer mu.Unlock()
-	var users []string
-	for c := range clients {
-		if c.room == room {
-			users = append(users, c.name)
-		}
-	}
-	return users
-}
-func changeRoom(c *Client, newroom string) {
+
+func changeRoom(h *Hub, c *Client, newroom string) {
 	c.mu.Lock()
 	oldRoom := c.room
 	if oldRoom == newroom {
 		c.mu.Unlock()
 		sendJSON(c, Message{
 			Type:    "system",
-			Message: "You are already in room" + newroom,
+			Message: "You are already in room " + newroom,
 		})
 		return
 	}
 	c.room = newroom
 	c.mu.Unlock()
+
 	if oldRoom != "" {
-		broadcastJSONtoRoom(oldRoom, Message{
+		h.broadcastJSONtoRoom(oldRoom, Message{
 			Type:    "system",
 			Message: c.name + " left the room",
 		})
 	}
-	broadcastJSONtoRoom(newroom, Message{
+
+	h.broadcastJSONtoRoom(newroom, Message{
 		Type:    "system",
 		Message: c.name + " joined the room",
 	})
+
 	sendJSON(c, Message{
 		Type:    "system",
 		Message: "You moved to " + newroom,
 	})
 }
+
 func hasPermission(c *Client, required string) bool {
 	roles := map[string]int{
 		roleUser:  1,
@@ -470,4 +508,25 @@ func hasPermission(c *Client, required string) bool {
 	}
 
 	return roles[c.role] >= roles[required]
+}
+
+func (h *Hub) findClient(name string) *Client {
+	resp := make(chan *Client, 1)
+	h.findReq <- findRequest{name: name, resp: resp}
+	return <-resp
+}
+func (h *Hub) getUsernames() []string {
+	resp := make(chan []string, 1)
+	h.usersReq <- userRequest{resp: resp}
+	return <-resp
+}
+func (h *Hub) getusersfromRoom(room string) []string {
+	resp := make(chan []string, 1)
+	h.roomUsersReq <- roomUserRequest{room: room, resp: resp}
+	return <-resp
+}
+func (h *Hub) isNameTaken(name string) bool {
+	resp := make(chan bool, 1)
+	h.nameReq <- nameTakenRequest{name: name, resp: resp}
+	return <-resp
 }
