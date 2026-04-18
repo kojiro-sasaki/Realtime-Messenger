@@ -36,6 +36,7 @@ type Hub struct {
 	usersReq      chan userRequest
 	roomUsersReq  chan roomUserRequest
 	nameReq       chan nameTakenRequest
+	dbChan        chan Message
 }
 type RoomMessage struct {
 	room string
@@ -66,6 +67,7 @@ func newHub() *Hub {
 		usersReq:      make(chan userRequest),
 		roomUsersReq:  make(chan roomUserRequest),
 		nameReq:       make(chan nameTakenRequest),
+		dbChan:        make(chan Message, 100),
 	}
 }
 func (h *Hub) Run() {
@@ -146,14 +148,57 @@ func (c *Client) readConn(h *Hub) {
 		c.conn.Close()
 	}()
 
-	c.conn.SetReadLimit(512)
+	c.conn.SetReadLimit(1024)
+	c.conn.SetReadDeadline(time.Now().Add(120 * time.Second))
+	c.conn.SetPongHandler(func(string) error {
+		c.conn.SetReadDeadline(time.Now().Add(120 * time.Second))
+		return nil
+	})
 
 	for {
 		_, msg, err := c.conn.ReadMessage()
 		if err != nil {
 			break
 		}
-		h.broadcast <- msg
+
+		text := strings.TrimSpace(string(msg))
+		if text == "" {
+			continue
+		}
+		c.mu.Lock()
+		if time.Since(c.lastMessage) < 200*time.Millisecond {
+			c.mu.Unlock()
+			continue
+		}
+		c.lastMessage = time.Now()
+		c.mu.Unlock()
+
+		if strings.HasPrefix(text, "/") {
+			if handleCommand(h, c, text) {
+				continue
+			}
+		}
+		if len(text) > 500 {
+			sendJSON(c, Message{
+				Type:    "system",
+				Message: "Message too long",
+			})
+			continue
+		}
+		select {
+		case h.dbChan <- Message{
+			Sender:  c.name,
+			Message: text,
+		}:
+		default:
+			fmt.Println("db queue full")
+		}
+
+		h.broadcastJSONtoRoom(c.room, Message{
+			Type:    "message",
+			Sender:  "[" + c.room + "] [" + c.role + "] " + c.name,
+			Message: text,
+		})
 	}
 }
 func (c *Client) writeConn() {
