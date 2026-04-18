@@ -12,8 +12,9 @@ import (
 func main() {
 	initDB()
 	createTables()
-
-	http.HandleFunc("/ws", wsHandler)
+	h := newHub()
+	go h.Run()
+	http.HandleFunc("/ws", wsHandler(h))
 	http.HandleFunc("/register", registerHandler)
 	http.HandleFunc("/login", loginHandler)
 
