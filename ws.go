@@ -88,8 +88,10 @@ func wsHandler(h *Hub) http.HandlerFunc {
 			name: nameStr,
 			room: "general",
 			role: role,
+			send: make(chan []byte, 256),
 		}
-
+		go client.writeConn()
+		go client.readConn(h)
 		go func() {
 			ticker := time.NewTicker(60 * time.Second)
 			defer ticker.Stop()
@@ -126,58 +128,5 @@ func wsHandler(h *Hub) http.HandlerFunc {
 			})
 		}()
 
-		for {
-			_, msg, err := conn.ReadMessage()
-			if err != nil {
-				fmt.Println("read error:", err)
-				break
-			}
-
-			text := strings.TrimSpace(string(msg))
-			fmt.Println("message:", client.name, text)
-
-			if text == "" {
-				continue
-			}
-
-			client.mu.Lock()
-			if time.Since(client.lastMessage) < 200*time.Millisecond {
-				client.mu.Unlock()
-				continue
-			}
-			client.lastMessage = time.Now()
-			client.mu.Unlock()
-
-			if strings.HasPrefix(text, "/") {
-				fmt.Println("command:", client.name, "->", text)
-
-				if handleCommand(h, client, text) {
-					continue
-				}
-			}
-
-			if len(text) > 500 {
-				sendJSON(client, Message{
-					Type:    "system",
-					Message: "Message too long",
-				})
-				continue
-			}
-
-			_, err = db.Exec(
-				"INSERT INTO messages (sender, text) VALUES (?, ?)",
-				client.name,
-				text,
-			)
-			if err != nil {
-				fmt.Println("db error:", err)
-			}
-
-			h.broadcastJSONtoRoom(client.room, Message{
-				Type:    "message",
-				Sender:  "[" + client.room + "] " + "[" + client.role + "] " + client.name,
-				Message: text,
-			})
-		}
 	}
 }
