@@ -117,5 +117,16 @@ func wsHandler(h *Hub) http.HandlerFunc {
 			Type:    "system",
 			Message: client.name + " joined the chat",
 		})
+
+		defer func() {
+			h.unregister <- client
+			fmt.Println("disconnected:", client.name)
+
+			h.broadcastJSONtoRoom(client.room, Message{
+				Type:    "system",
+				Message: client.name + " left the chat",
+			})
+		}()
+
 	}
 }
