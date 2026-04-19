@@ -14,6 +14,7 @@ func main() {
 	createTables()
 	h := newHub()
 	go h.Run()
+	go startLoginLimiter()
 	for i := 0; i < 3; i++ {
 		go func() {
 			for msg := range h.dbChan {
