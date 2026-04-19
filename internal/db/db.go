@@ -1,4 +1,4 @@
-package main
+package db
 
 import (
 	"database/sql"
@@ -7,20 +7,21 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-var db *sql.DB
+var DB *sql.DB
 
-func initDB() {
+func InitDB() {
 	var err error
-	db, err = sql.Open("sqlite", "chat.db")
+	DB, err = sql.Open("sqlite", "chat.db")
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err = db.Ping(); err != nil {
+	if err = DB.Ping(); err != nil {
 		log.Fatal(err)
 	}
 	log.Println("SQLite connected")
 }
-func createTables() {
+
+func CreateTables() {
 	query := `
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,15 +37,16 @@ func createTables() {
 	);
 	`
 
-	_, err := db.Exec(query)
+	_, err := DB.Exec(query)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
-func getUserID(username string) (int, error) {
+
+func GetUserID(username string) (int, error) {
 	var id int
 
-	err := db.QueryRow(
+	err := DB.QueryRow(
 		"SELECT id FROM users WHERE username=?",
 		username,
 	).Scan(&id)

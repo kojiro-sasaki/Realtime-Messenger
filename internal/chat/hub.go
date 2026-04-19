@@ -1,6 +1,7 @@
-package main
+package chat
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -56,7 +57,7 @@ type Message struct {
 	Message string `json:"message,omitempty"`
 }
 
-func newHub() *Hub {
+func NewHub() *Hub {
 	return &Hub{
 		clients:       make(map[*Client]bool),
 		broadcast:     make(chan []byte),
@@ -80,26 +81,26 @@ func (h *Hub) Run() {
 		case client := <-h.unregister:
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
-				close(client.send)
+				close(client.Send)
 			}
 
 		case msg := <-h.broadcast:
 			for client := range h.clients {
 				select {
-				case client.send <- msg:
+				case client.Send <- msg:
 				default:
-					close(client.send)
+					close(client.Send)
 					delete(h.clients, client)
 				}
 			}
 
 		case rm := <-h.roombroadcast:
 			for client := range h.clients {
-				if client.room == rm.room {
+				if client.Room == rm.room {
 					select {
-					case client.send <- rm.data:
+					case client.Send <- rm.data:
 					default:
-						close(client.send)
+						close(client.Send)
 						delete(h.clients, client)
 					}
 				}
@@ -107,7 +108,7 @@ func (h *Hub) Run() {
 		case req := <-h.findReq:
 			var res *Client
 			for c := range h.clients {
-				if c.name == req.name {
+				if c.Name == req.name {
 					res = c
 					break
 				}
@@ -116,15 +117,15 @@ func (h *Hub) Run() {
 		case req := <-h.usersReq:
 			var names []string
 			for c := range h.clients {
-				names = append(names, c.name)
+				names = append(names, c.Name)
 			}
 			req.resp <- names
 
 		case req := <-h.roomUsersReq:
 			var users []string
 			for c := range h.clients {
-				if c.room == req.room {
-					users = append(users, c.name)
+				if c.Room == req.room {
+					users = append(users, c.Name)
 				}
 			}
 			req.resp <- users
@@ -132,7 +133,7 @@ func (h *Hub) Run() {
 		case req := <-h.nameReq:
 			taken := false
 			for c := range h.clients {
-				if c.name == req.name {
+				if c.Name == req.name {
 					taken = true
 					break
 				}
@@ -145,18 +146,18 @@ func (h *Hub) Run() {
 func (c *Client) readConn(h *Hub) {
 	defer func() {
 		h.unregister <- c
-		c.conn.Close()
+		c.Conn.Close()
 	}()
 
-	c.conn.SetReadLimit(1024)
-	c.conn.SetReadDeadline(time.Now().Add(120 * time.Second))
-	c.conn.SetPongHandler(func(string) error {
-		c.conn.SetReadDeadline(time.Now().Add(120 * time.Second))
+	c.Conn.SetReadLimit(1024)
+	c.Conn.SetReadDeadline(time.Now().Add(120 * time.Second))
+	c.Conn.SetPongHandler(func(string) error {
+		c.Conn.SetReadDeadline(time.Now().Add(120 * time.Second))
 		return nil
 	})
 
 	for {
-		_, msg, err := c.conn.ReadMessage()
+		_, msg, err := c.Conn.ReadMessage()
 		if err != nil {
 			break
 		}
@@ -165,13 +166,13 @@ func (c *Client) readConn(h *Hub) {
 		if text == "" {
 			continue
 		}
-		c.mu.Lock()
-		if time.Since(c.lastMessage) < 200*time.Millisecond {
-			c.mu.Unlock()
+		c.Mu.Lock()
+		if time.Since(c.LastMessage) < 200*time.Millisecond {
+			c.Mu.Unlock()
 			continue
 		}
-		c.lastMessage = time.Now()
-		c.mu.Unlock()
+		c.LastMessage = time.Now()
+		c.Mu.Unlock()
 
 		if strings.HasPrefix(text, "/") {
 			if handleCommand(h, c, text) {
@@ -187,24 +188,24 @@ func (c *Client) readConn(h *Hub) {
 		}
 		select {
 		case h.dbChan <- Message{
-			Sender:  c.name,
+			Sender:  c.Name,
 			Message: text,
 		}:
 		default:
 			fmt.Println("db queue full")
 		}
 
-		h.broadcastJSONtoRoom(c.room, Message{
+		h.broadcastJSONtoRoom(c.Room, Message{
 			Type:    "message",
-			Sender:  "[" + c.room + "] [" + c.role + "] " + c.name,
+			Sender:  "[" + c.Room + "] [" + c.Role + "] " + c.Name,
 			Message: text,
 		})
 	}
 }
 func (c *Client) writeConn() {
-	for msg := range c.send {
-		c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-		err := c.conn.WriteMessage(websocket.TextMessage, msg)
+	for msg := range c.Send {
+		c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		err := c.Conn.WriteMessage(websocket.TextMessage, msg)
 		if err != nil {
 			return
 		}
@@ -223,14 +224,14 @@ func (h *Hub) sendPrivateMessage(sender *Client, recipient string, msg string) {
 
 	sendJSON(target, Message{
 		Type:    "dm",
-		Sender:  sender.name,
+		Sender:  sender.Name,
 		Message: msg,
 	})
 
 	sendJSON(sender, Message{
 		Type:    "dm",
-		Sender:  sender.name,
-		Message: "(to " + target.name + ") " + msg,
+		Sender:  sender.Name,
+		Message: "(to " + target.Name + ") " + msg,
 	})
 }
 
@@ -300,10 +301,10 @@ func handleCommand(h *Hub, c *Client, text string) bool {
 			})
 			return true
 		}
-		c.mu.Lock()
-		old := c.name
-		c.name = newname
-		c.mu.Unlock()
+		c.Mu.Lock()
+		old := c.Name
+		c.Name = newname
+		c.Mu.Unlock()
 
 		sendJSON(c, Message{
 			Type:    "system",
@@ -354,7 +355,7 @@ func handleCommand(h *Hub, c *Client, text string) bool {
 	if text == "/rusers" {
 		sendJSON(c, Message{
 			Type:    "system",
-			Message: "List of user in this room" + strings.Join(h.getusersfromRoom(c.room), ", "),
+			Message: "List of user in this room" + strings.Join(h.getusersfromRoom(c.Room), ", "),
 		})
 		return true
 	}
@@ -363,7 +364,7 @@ func handleCommand(h *Hub, c *Client, text string) bool {
 		return true
 	}
 	if strings.HasPrefix(text, "/kick ") {
-		if !hasPermission(c, roleMod) {
+		if !hasPermission(c, RoleMod) {
 			sendJSON(c, Message{
 				Type:    "system",
 				Message: "No permission",
@@ -383,12 +384,12 @@ func handleCommand(h *Hub, c *Client, text string) bool {
 		h.unregister <- target
 		h.broadcastJSON(Message{
 			Type:    "system",
-			Message: target.name + " was kicked by " + c.name,
+			Message: target.Name + " was kicked by " + c.Name,
 		})
 		return true
 	}
 	if strings.HasPrefix(text, "/role ") {
-		if !hasPermission(c, roleAdmin) {
+		if !hasPermission(c, RoleAdmin) {
 			sendJSON(c, Message{
 				Type:    "system",
 				Message: "No permission",
@@ -417,24 +418,24 @@ func handleCommand(h *Hub, c *Client, text string) bool {
 			return true
 		}
 
-		target.mu.Lock()
+		target.Mu.Lock()
 		switch newRole {
 		case "user":
-			target.role = roleUser
+			target.Role = RoleUser
 		case "mod":
-			target.role = roleMod
+			target.Role = RoleMod
 		case "admin":
-			target.role = roleAdmin
+			target.Role = RoleAdmin
 		default:
-			target.mu.Unlock()
+			target.Mu.Unlock()
 			sendJSON(c, Message{
 				Type:    "system",
 				Message: "Invalid role (user/mod/admin)",
 			})
 			return true
 		}
-		updatedRole := target.role
-		target.mu.Unlock()
+		updatedRole := target.Role
+		target.Mu.Unlock()
 
 		sendJSON(target, Message{
 			Type:    "system",
@@ -443,7 +444,7 @@ func handleCommand(h *Hub, c *Client, text string) bool {
 
 		sendJSON(c, Message{
 			Type:    "system",
-			Message: target.name + " is now " + updatedRole,
+			Message: target.Name + " is now " + updatedRole,
 		})
 
 		return true
@@ -469,7 +470,7 @@ func handleCommand(h *Hub, c *Client, text string) bool {
 		sendJSON(c, Message{
 			Type: "system",
 			Message: fmt.Sprintf("Name:%s\nRole:%s\nRoom%s\n",
-				target.name, target.role, target.room),
+				target.Name, target.Role, target.Room),
 		})
 		return true
 	}
@@ -488,7 +489,7 @@ func sendJSON(c *Client, v any) error {
 		return err
 	}
 	select {
-	case c.send <- data:
+	case c.Send <- data:
 	default:
 		return fmt.Errorf("client overloaded")
 	}
@@ -514,29 +515,29 @@ func getRooms() []string {
 }
 
 func changeRoom(h *Hub, c *Client, newroom string) {
-	c.mu.Lock()
-	oldRoom := c.room
+	c.Mu.Lock()
+	oldRoom := c.Room
 	if oldRoom == newroom {
-		c.mu.Unlock()
+		c.Mu.Unlock()
 		sendJSON(c, Message{
 			Type:    "system",
 			Message: "You are already in room " + newroom,
 		})
 		return
 	}
-	c.room = newroom
-	c.mu.Unlock()
+	c.Room = newroom
+	c.Mu.Unlock()
 
 	if oldRoom != "" {
 		h.broadcastJSONtoRoom(oldRoom, Message{
 			Type:    "system",
-			Message: c.name + " left the room",
+			Message: c.Name + " left the room",
 		})
 	}
 
 	h.broadcastJSONtoRoom(newroom, Message{
 		Type:    "system",
-		Message: c.name + " joined the room",
+		Message: c.Name + " joined the room",
 	})
 
 	sendJSON(c, Message{
@@ -547,12 +548,12 @@ func changeRoom(h *Hub, c *Client, newroom string) {
 
 func hasPermission(c *Client, required string) bool {
 	roles := map[string]int{
-		roleUser:  1,
-		roleMod:   2,
-		roleAdmin: 3,
+		RoleUser:  1,
+		RoleMod:   2,
+		RoleAdmin: 3,
 	}
 
-	return roles[c.role] >= roles[required]
+	return roles[c.Role] >= roles[required]
 }
 
 func (h *Hub) findClient(name string) *Client {
@@ -574,4 +575,16 @@ func (h *Hub) isNameTaken(name string) bool {
 	resp := make(chan bool, 1)
 	h.nameReq <- nameTakenRequest{name: name, resp: resp}
 	return <-resp
+}
+func (h *Hub) StartDBWorker(db *sql.DB) {
+	for msg := range h.dbChan {
+		_, err := db.Exec(
+			"INSERT INTO messages (sender, text) VALUES (?, ?)",
+			msg.Sender,
+			msg.Message,
+		)
+		if err != nil {
+			fmt.Println("db error:", err)
+		}
+	}
 }

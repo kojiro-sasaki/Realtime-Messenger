@@ -1,8 +1,9 @@
-package main
+package auth
 
 import (
 	"encoding/json"
 	"net/http"
+	"realtime-messenger/internal/db"
 	"strings"
 	"time"
 
@@ -28,7 +29,7 @@ type checkRequest struct {
 
 var loginChan = make(chan checkRequest, 100)
 
-func startLoginLimiter() {
+func StartLoginLimiter() {
 	attempts := make(map[string]*loginAttempt)
 
 	for req := range loginChan {
@@ -74,7 +75,7 @@ func checkPass(hash, password string) bool {
 	return err == nil
 }
 
-func registerHandler(w http.ResponseWriter, r *http.Request) {
+func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodGet {
 		http.ServeFile(w, r, "./static/register.html")
@@ -105,7 +106,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		_, err = db.Exec(
+		_, err = db.DB.Exec(
 			"INSERT INTO users (username, password) VALUES (?, ?)",
 			u.Username,
 			hash,
@@ -122,7 +123,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
-func loginHandler(w http.ResponseWriter, r *http.Request) {
+func LoginHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodGet {
 		http.ServeFile(w, r, "./static/login.html")
@@ -152,7 +153,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var hash string
-		err := db.QueryRow(
+		err := db.DB.QueryRow(
 			"SELECT password FROM users WHERE username=?",
 			u.Username,
 		).Scan(&hash)
@@ -196,7 +197,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
-func isAuthenticated(r *http.Request) (string, bool) {
+func IsAuthenticated(r *http.Request) (string, bool) {
 	cookie, err := r.Cookie("user")
 	if err != nil {
 		return "", false

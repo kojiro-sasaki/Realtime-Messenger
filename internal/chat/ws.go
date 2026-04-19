@@ -1,13 +1,14 @@
-package main
+package chat
 
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/websocket"
 	"net/http"
+	"realtime-messenger/internal/db"
+
 	"strings"
 	"time"
-
-	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{
@@ -17,7 +18,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func wsHandler(h *Hub) http.HandlerFunc {
+func WsHandler(h *Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -71,24 +72,24 @@ func wsHandler(h *Hub) http.HandlerFunc {
 			return
 		}
 
-		role := roleUser
+		role := RoleUser
 		if nameStr == "admin123" {
-			role = roleAdmin
+			role = RoleAdmin
 		}
 
-		id, err := getUserID(nameStr)
+		id, err := db.GetUserID(nameStr)
 		if err != nil {
 			conn.Close()
 			return
 		}
 
 		client := &Client{
-			conn: conn,
-			id:   id,
-			name: nameStr,
-			room: "general",
-			role: role,
-			send: make(chan []byte, 256),
+			Conn: conn,
+			Id:   id,
+			Name: nameStr,
+			Room: "general",
+			Role: role,
+			Send: make(chan []byte, 256),
 		}
 		go client.writeConn()
 		go client.readConn(h)
@@ -99,9 +100,9 @@ func wsHandler(h *Hub) http.HandlerFunc {
 			for {
 				<-ticker.C
 
-				client.mu.Lock()
+				client.Mu.Lock()
 				err := conn.WriteMessage(websocket.PingMessage, nil)
-				client.mu.Unlock()
+				client.Mu.Unlock()
 
 				if err != nil {
 					return
@@ -111,11 +112,11 @@ func wsHandler(h *Hub) http.HandlerFunc {
 
 		h.register <- client
 
-		fmt.Println("connected:", client.name)
+		fmt.Println("connected:", client.Name)
 
-		h.broadcastJSONtoRoom(client.room, Message{
+		h.broadcastJSONtoRoom(client.Room, Message{
 			Type:    "system",
-			Message: client.name + " joined the chat",
+			Message: client.Name + " joined the chat",
 		})
 	}
 }
