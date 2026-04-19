@@ -98,9 +98,12 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		http.SetCookie(w, &http.Cookie{
-			Name:  "user",
-			Value: u.Username,
-			Path:  "/",
+			Name:     "user",
+			Value:    u.Username,
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+			Path:     "/",
 		})
 
 		w.Write([]byte("login success"))
