@@ -158,7 +158,6 @@ func (c *Client) readConn(h *Hub) {
 	for {
 		_, msg, err := c.conn.ReadMessage()
 		if err != nil {
-			fmt.Println("READ ERROR:", err)
 			break
 		}
 
@@ -483,12 +482,7 @@ func (h *Hub) broadcastJSON(v any) {
 	}
 	h.broadcast <- data
 }
-func sendJSON(c *Client, v any) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("send on closed chanel")
-		}
-	}()
+func sendJSON(c *Client, v any) error {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return err
