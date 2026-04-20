@@ -23,7 +23,8 @@ func main() {
 	hub := chat.NewHub()
 	go hub.Run()
 
-	for i := 0; i < 3; i++ {
+	workers := 4
+	for i := 0; i < workers; i++ {
 		go hub.StartDBWorker(db.DB)
 	}
 
@@ -65,6 +66,6 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	server.Shutdown(ctx)
+	hub.Shutdown()
 }
