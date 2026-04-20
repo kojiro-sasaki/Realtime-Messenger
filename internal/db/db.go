@@ -26,7 +26,8 @@ func CreateTables() {
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		username TEXT UNIQUE,
-		password TEXT
+		password TEXT,
+		role TEXT DEFAULT 'user'
 	);
 
 	CREATE TABLE IF NOT EXISTS messages (
@@ -56,4 +57,10 @@ func GetUserID(username string) (int, error) {
 	}
 
 	return id, nil
+}
+func GetUserRole(username string) (string, error) {
+	var role string
+	err := DB.QueryRow(
+		"SELECT role FROM users WHERE username=?", username).Scan(&role)
+	return role, err
 }

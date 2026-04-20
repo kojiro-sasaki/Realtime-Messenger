@@ -2,21 +2,23 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func getSecret() string {
+var secretKey []byte
+
+func InitSecret() error {
 	s := os.Getenv("JWT_SECRET")
 	if s == "" {
-		panic("JWT_SECRET not set")
+		return fmt.Errorf("JWT_SECRET not set")
 	}
-	return s
+	secretKey = []byte(s)
+	return nil
 }
-
-var secretKey = []byte(getSecret())
 
 type Claims struct {
 	Username string `json:"username"`

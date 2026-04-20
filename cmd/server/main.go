@@ -17,7 +17,9 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	db.InitDB()
 	db.CreateTables()
-
+	if err := auth.InitSecret(); err != nil {
+		log.Fatal(err)
+	}
 	go auth.StartLoginLimiter()
 
 	hub := chat.NewHub()
@@ -25,7 +27,7 @@ func main() {
 
 	workers := 4
 	for i := 0; i < workers; i++ {
-		go hub.StartDBWorker(db.DB)
+		hub.StartDBWorkerTracked(db.DB)
 	}
 
 	http.HandleFunc("/ws", chat.WsHandler(hub))

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -39,7 +40,7 @@ type Hub struct {
 	roomUsersReq  chan roomUserRequest
 	nameReq       chan nameTakenRequest
 	dbChan        chan Message
-	wg            sync.WaitGroup
+	Wg            sync.WaitGroup
 }
 type RoomMessage struct {
 	room string
@@ -63,7 +64,7 @@ func NewHub() *Hub {
 	return &Hub{
 		clients:       make(map[*Client]bool),
 		broadcast:     make(chan []byte),
-		roombroadcast: make(chan RoomMessage),
+		roombroadcast: make(chan RoomMessage, 256),
 		register:      make(chan *Client),
 		unregister:    make(chan *Client),
 		findReq:       make(chan findRequest),
@@ -386,6 +387,7 @@ func handleCommand(h *Hub, c *Client, text string) bool {
 			})
 			return true
 		}
+		target.Conn.Close()
 		h.unregister <- target
 		h.broadcastJSON(Message{
 			Type:    "system",
@@ -455,6 +457,13 @@ func handleCommand(h *Hub, c *Client, text string) bool {
 		return true
 	}
 	if strings.HasPrefix(text, "/whois ") {
+		if !hasPermission(c, RoleMod) {
+			sendJSON(c, Message{
+				Type:    "system",
+				Message: "You have no permission",
+			})
+			return true
+		}
 		parts := strings.SplitN(text, " ", 2)
 		if len(parts) < 2 {
 			sendJSON(c, Message{
@@ -474,7 +483,7 @@ func handleCommand(h *Hub, c *Client, text string) bool {
 		}
 		sendJSON(c, Message{
 			Type: "system",
-			Message: fmt.Sprintf("Name:%s\nRole:%s\nRoom%s\n",
+			Message: fmt.Sprintf("Name:%s\nRole:%s\nRoom:%s\n",
 				target.Name, target.Role, target.Room),
 		})
 		return true
@@ -582,7 +591,7 @@ func (h *Hub) isNameTaken(name string) bool {
 	return <-resp
 }
 func (h *Hub) StartDBWorker(db *sql.DB) {
-	defer h.wg.Done()
+	defer h.Wg.Done()
 	for msg := range h.dbChan {
 		_, err := db.Exec(
 			"INSERT INTO messages (sender, text) VALUES (?, ?)",
@@ -590,12 +599,16 @@ func (h *Hub) StartDBWorker(db *sql.DB) {
 			msg.Message,
 		)
 		if err != nil {
-			fmt.Println("db error:", err)
+			log.Println("db error:", err)
 		}
 	}
 }
 
 func (h *Hub) Shutdown() {
 	close(h.dbChan)
-	h.wg.Wait()
+	h.Wg.Wait()
+}
+func (h *Hub) StartDBWorkerTracked(db *sql.DB) {
+	h.Wg.Add(1)
+	go h.StartDBWorker(db)
 }

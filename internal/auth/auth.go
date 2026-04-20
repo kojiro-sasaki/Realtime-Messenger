@@ -108,7 +108,15 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "password must be at least 6 characters", http.StatusBadRequest)
 			return
 		}
-
+		u.Username = strings.ToLower(strings.TrimSpace(u.Username))
+		if len(u.Username) > 20 {
+			http.Error(w, "username too long(max 20 )", http.StatusBadRequest)
+			return
+		}
+		if strings.Contains(u.Username, " ") {
+			http.Error(w, "username cannot contain spaces", http.StatusBadRequest)
+			return
+		}
 		hash, err := hashPass(u.Password)
 		if err != nil {
 			http.Error(w, "error hashing password", http.StatusInternalServerError)
@@ -201,7 +209,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 			Name:     "session",
 			Value:    token,
 			HttpOnly: true,
-			Secure:   false,
+			Secure:   true,
 			SameSite: http.SameSiteStrictMode,
 			Path:     "/",
 			MaxAge:   86400,

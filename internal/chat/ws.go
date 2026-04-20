@@ -2,7 +2,7 @@ package chat
 
 import (
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
 	"realtime-messenger/internal/auth"
 	"realtime-messenger/internal/db"
@@ -24,17 +24,9 @@ func WsHandler(h *Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			fmt.Println("upgrade error:", err)
+			log.Println("upgrade error:", err)
 			return
 		}
-
-		conn.SetReadLimit(1024)
-		conn.SetReadDeadline(time.Now().Add(120 * time.Second))
-		conn.SetPongHandler(func(string) error {
-			conn.SetReadDeadline(time.Now().Add(120 * time.Second))
-			return nil
-		})
-
 		cookie, err := r.Cookie("session")
 		if err != nil {
 			conn.Close()
@@ -78,9 +70,10 @@ func WsHandler(h *Hub) http.HandlerFunc {
 			return
 		}
 
-		role := RoleUser
-		if nameStr == "admin123" {
-			role = RoleAdmin
+		role, err := db.GetUserRole(nameStr)
+		if err != nil {
+			conn.Close()
+			return
 		}
 
 		id, err := db.GetUserID(nameStr)
@@ -118,7 +111,7 @@ func WsHandler(h *Hub) http.HandlerFunc {
 
 		h.register <- client
 
-		fmt.Println("connected:", client.Name)
+		log.Println("connected:", client.Name)
 
 		h.broadcastJSONtoRoom(client.Room, Message{
 			Type:    "system",
