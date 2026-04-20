@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -38,6 +39,7 @@ type Hub struct {
 	roomUsersReq  chan roomUserRequest
 	nameReq       chan nameTakenRequest
 	dbChan        chan Message
+	wg            sync.WaitGroup
 }
 type RoomMessage struct {
 	room string
@@ -192,7 +194,10 @@ func (c *Client) readConn(h *Hub) {
 			Message: text,
 		}:
 		default:
-			fmt.Println("db queue full")
+			sendJSON(c, Message{
+				Type:    "system",
+				Message: "Server overloaded , try again",
+			})
 		}
 
 		h.broadcastJSONtoRoom(c.Room, Message{
@@ -577,6 +582,7 @@ func (h *Hub) isNameTaken(name string) bool {
 	return <-resp
 }
 func (h *Hub) StartDBWorker(db *sql.DB) {
+	defer h.wg.Done()
 	for msg := range h.dbChan {
 		_, err := db.Exec(
 			"INSERT INTO messages (sender, text) VALUES (?, ?)",
@@ -587,4 +593,9 @@ func (h *Hub) StartDBWorker(db *sql.DB) {
 			fmt.Println("db error:", err)
 		}
 	}
+}
+
+func (h *Hub) Shutdown() {
+	close(h.dbChan)
+	h.wg.Wait()
 }
