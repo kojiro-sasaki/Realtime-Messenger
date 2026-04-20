@@ -3,9 +3,11 @@ package chat
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/websocket"
 	"net/http"
+	"realtime-messenger/internal/auth"
 	"realtime-messenger/internal/db"
+
+	"github.com/gorilla/websocket"
 
 	"strings"
 	"time"
@@ -33,13 +35,17 @@ func WsHandler(h *Hub) http.HandlerFunc {
 			return nil
 		})
 
-		cookie, err := r.Cookie("user")
+		cookie, err := r.Cookie("session")
 		if err != nil {
 			conn.Close()
 			return
 		}
-
-		nameStr := strings.ToLower(strings.TrimSpace(cookie.Value))
+		nameStr, err := auth.ParseToken(cookie.Value)
+		if err != nil {
+			conn.Close()
+			return
+		}
+		nameStr = strings.ToLower(strings.TrimSpace(nameStr))
 		if nameStr == "" {
 			conn.Close()
 			return
