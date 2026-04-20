@@ -24,7 +24,7 @@ type checkRequest struct {
 	ip       string
 	username string
 	resp     chan bool
-	success  bool
+	action   string
 }
 
 var loginChan = make(chan checkRequest, 100)
@@ -38,30 +38,39 @@ func StartLoginLimiter() {
 		att := attempts[key]
 		now := time.Now()
 
-		if att != nil && now.Before(att.blockedTo) {
-			req.resp <- false
-			continue
-		}
+		switch req.action {
 
-		if req.success {
+		case "check":
+			if att != nil {
+				if now.Before(att.blockedTo) {
+					req.resp <- false
+					continue
+				}
+				if !att.blockedTo.IsZero() && att.blockedTo.Before(now) {
+					delete(attempts, key)
+					att = nil
+				}
+			}
+			req.resp <- true
+
+		case "fail":
+			if att == nil {
+				att = &loginAttempt{}
+				attempts[key] = att
+			}
+			att.count++
+
+			if att.count >= 5 {
+				att.blockedTo = now.Add(1 * time.Minute)
+				att.count = 0
+			}
+
+			req.resp <- true
+
+		case "success":
 			delete(attempts, key)
 			req.resp <- true
-			continue
 		}
-
-		if att == nil {
-			att = &loginAttempt{}
-			attempts[key] = att
-		}
-
-		att.count++
-
-		if att.count >= 5 {
-			att.blockedTo = now.Add(1 * time.Minute)
-			att.count = 0
-		}
-
-		req.resp <- true
 	}
 }
 
@@ -141,11 +150,12 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		ip := strings.Split(r.RemoteAddr, ":")[0]
 
 		resp := make(chan bool)
+
 		loginChan <- checkRequest{
 			ip:       ip,
 			username: u.Username,
 			resp:     resp,
-			success:  false,
+			action:   "check",
 		}
 
 		if !<-resp {
@@ -160,12 +170,12 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 
 		if err != nil || !checkPass(hash, u.Password) {
 
-			resp := make(chan bool)
+			resp = make(chan bool)
 			loginChan <- checkRequest{
 				ip:       ip,
 				username: u.Username,
 				resp:     resp,
-				success:  false,
+				action:   "fail",
 			}
 			<-resp
 
@@ -177,7 +187,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 			ip:       ip,
 			username: u.Username,
 			resp:     resp,
-			success:  true,
+			action:   "success",
 		}
 		<-resp
 
