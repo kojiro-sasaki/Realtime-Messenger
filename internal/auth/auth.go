@@ -191,13 +191,20 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		<-resp
 
+		token, err := GenerateToken(u.Username)
+		if err != nil {
+			http.Error(w, "token error", http.StatusInternalServerError)
+			return
+		}
+
 		http.SetCookie(w, &http.Cookie{
-			Name:     "user",
-			Value:    u.Username,
+			Name:     "session",
+			Value:    token,
 			HttpOnly: true,
 			Secure:   false,
 			SameSite: http.SameSiteStrictMode,
 			Path:     "/",
+			MaxAge:   86400,
 		})
 
 		w.Write([]byte("login success"))
@@ -208,9 +215,13 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func IsAuthenticated(r *http.Request) (string, bool) {
-	cookie, err := r.Cookie("user")
+	cookie, err := r.Cookie("session")
 	if err != nil {
 		return "", false
 	}
-	return cookie.Value, true
+	username, err := ParseToken(cookie.Value)
+	if err != nil {
+		return "", false
+	}
+	return username, true
 }
