@@ -34,11 +34,14 @@ func WsHandler(h *Hub) http.HandlerFunc {
 		}
 		nameStr, err := auth.ParseToken(cookie.Value)
 		if err != nil {
+			log.Println("ws: bad token:", err)
+
 			conn.Close()
 			return
 		}
 		nameStr = strings.ToLower(strings.TrimSpace(nameStr))
 		if nameStr == "" {
+
 			conn.Close()
 			return
 		}
@@ -66,18 +69,22 @@ func WsHandler(h *Hub) http.HandlerFunc {
 				Message: "Name already taken",
 			})
 			conn.WriteMessage(websocket.TextMessage, data)
+			log.Println("ws: name taken:", nameStr)
 			conn.Close()
 			return
 		}
 
 		role, err := db.GetUserRole(nameStr)
 		if err != nil {
+			log.Println("ws: no role for:", nameStr, err)
+
 			conn.Close()
 			return
 		}
 
 		id, err := db.GetUserID(nameStr)
 		if err != nil {
+			log.Println("ws: no id for:", nameStr, err)
 			conn.Close()
 			return
 		}
