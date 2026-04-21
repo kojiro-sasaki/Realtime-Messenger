@@ -611,3 +611,12 @@ func (h *Hub) StartDBWorkerTracked(db *sql.DB) {
 	h.Wg.Add(1)
 	go h.StartDBWorker(db)
 }
+
+func (h *Hub) SaveMessage(msg Message) {
+	h.dbChan <- msg
+}
+func (h *Hub) CloseClients() {
+	for c := range h.clients {
+		c.Conn.Close()
+	}
+}

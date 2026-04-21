@@ -17,11 +17,12 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	db.InitDB()
 	db.CreateTables()
+
 	if err := auth.InitSecret(); err != nil {
 		log.Fatal(err)
 	}
-	go auth.StartLoginLimiter()
 
+	go auth.StartLoginLimiter()
 	hub := chat.NewHub()
 	go hub.Run()
 
@@ -61,15 +62,21 @@ func main() {
 			log.Println("server error:", err)
 		}
 	}()
-
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt)
-
 	<-quit
+
 	log.Println("shutting down...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	server.Shutdown(ctx)
+	hub.CloseClients()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Println("server shutdown error:", err)
+	}
 	hub.Shutdown()
+
+	log.Println("server stopped")
 }
