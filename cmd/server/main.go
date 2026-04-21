@@ -33,6 +33,8 @@ func main() {
 	http.HandleFunc("/ws", chat.WsHandler(hub))
 	http.HandleFunc("/register", auth.RegisterHandler)
 	http.HandleFunc("/login", auth.LoginHandler)
+	http.HandleFunc("/api/me", auth.MeHandler)
+	http.HandleFunc("/logout", auth.LogoutHandler)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		_, ok := auth.IsAuthenticated(r)

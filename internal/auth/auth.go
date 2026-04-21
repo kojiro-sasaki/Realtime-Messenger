@@ -233,3 +233,22 @@ func IsAuthenticated(r *http.Request) (string, bool) {
 	}
 	return username, true
 }
+
+func MeHandler(w http.ResponseWriter, r *http.Request) {
+	username, ok := IsAuthenticated(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"username": username})
+}
+func LogoutHandler(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:   "session",
+		Value:  "",
+		MaxAge: -1,
+		Path:   "/",
+	})
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}

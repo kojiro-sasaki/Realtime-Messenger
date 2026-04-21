@@ -70,9 +70,11 @@
     <script>
       let ws;
 
-      function getUsernameFromCookie() {
-        const match = document.cookie.match(/(^| )user=([^;]+)/);
-        return match ? match[2] : "unknown";
+      async function getUsername() {
+        const res = await fetch("/api/me");
+        if (!res.ok) return "unknown";
+        const data = await res.json();
+        return data.username;
       }
 
       function connect() {
@@ -132,7 +134,9 @@
         window.location.href = "/logout";
       }
 
-      document.getElementById("user").innerText = "@" + getUsernameFromCookie();
+      getUsername().then((name) => {
+        document.getElementById("user").innerText = "@" + name;
+      });
 
       connect();
     </script>

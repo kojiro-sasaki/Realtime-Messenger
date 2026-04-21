@@ -388,7 +388,6 @@ func handleCommand(h *Hub, c *Client, text string) bool {
 			return true
 		}
 		target.Conn.Close()
-		h.unregister <- target
 		h.broadcastJSON(Message{
 			Type:    "system",
 			Message: target.Name + " was kicked by " + c.Name,
